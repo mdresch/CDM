@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
@@ -24,6 +24,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
             constantEntity.EntityShape = EntityReferencePersistence.FromData(ctx, obj["entityShape"]);
             return constantEntity;
         }
+
         public static ConstantEntity ToData(CdmConstantEntityDefinition instance, ResolveOptions resOpt, CopyOptions options)
         {
             return new ConstantEntity

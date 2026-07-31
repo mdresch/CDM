@@ -1,4 +1,5 @@
 {
+  "documentVersion": "2.4",
   "jsonSchemaSemanticVersion": "1.0.0",
   "imports": [
     {
@@ -31,7 +32,7 @@
           "arguments": [
             {
               "name": "versionNumber",
-              "value": "2.2"
+              "value": "2.4"
             }
           ]
         }
@@ -58,12 +59,14 @@
                               [
                                 "en",
                                 "Household",
-                                "844060000"
+                                "844060000",
+                                "0000"
                               ],
                               [
                                 "en",
                                 "Organization",
-                                "844060001"
+                                "844060001",
+                                "0010"
                               ]
                             ]
                           }

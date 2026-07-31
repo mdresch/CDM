@@ -11,10 +11,14 @@ import {
     CdmDefinitionCollection,
     CdmE2ERelationship,
     CdmEntityDeclarationDefinition,
+    CdmEntityDefinition,
     CdmFolderDefinition,
     CdmImport,
     CdmImportCollection,
+    CdmLocalEntityDeclarationDefinition,
+    cdmLogCode,
     CdmManifestDeclarationDefinition,
+    CdmManifestDefinition,
     CdmObject,
     CdmObjectBase,
     CdmObjectDefinition,
@@ -22,54 +26,41 @@ import {
     CdmObjectReferenceBase,
     cdmObjectSimple,
     cdmObjectType,
+    CdmParameterDefinition,
+    CdmTraitDefinition,
+    CdmTraitReference,
     copyOptions,
-    Errors,
     ImportInfo,
+    ImportPriorities,
     importsLoadStrategy,
+    isDocumentDefinition,
+    isEntityDefinition,
     Logger,
+    ParameterCollection,
+    resolveContext,
     ResolvedAttributeSetBuilder,
     ResolvedTraitSetBuilder,
     resolveOptions,
     VisitCallback
 } from '../internal';
 
-/**
- * @internal
- */
-class ImportPriorities {
-    public importPriority: Map<CdmDocumentDefinition, ImportInfo>;
-    public monikerPriorityMap: Map<string, CdmDocumentDefinition>;
-    public hasCircularImport: boolean;
-
-    constructor() {
-        this.importPriority = new Map<CdmDocumentDefinition, ImportInfo>();
-        this.monikerPriorityMap = new Map<string, CdmDocumentDefinition>();
-        this.hasCircularImport = false;
-    }
-
-    public copy(): ImportPriorities {
-        const copy: ImportPriorities = new ImportPriorities();
-        if (this.importPriority) {
-            this.importPriority.forEach((v: ImportInfo, k: CdmDocumentDefinition) => { copy.importPriority.set(k, v); });
-        }
-        if (this.monikerPriorityMap) {
-            this.monikerPriorityMap.forEach((v: CdmDocumentDefinition, k: string) => { copy.monikerPriorityMap.set(k, v); });
-        }
-        copy.hasCircularImport = this.hasCircularImport;
-
-        return copy;
-    }
-}
+import { enterScope } from '../Utilities/Logging/Logger';
+import { using } from "using-statement";
 
 export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumentDefinition {
+    private TAG: string = CdmDocumentDefinition.name;
 
     public static get objectType(): cdmObjectType {
         return cdmObjectType.documentDef;
     }
 
+    /**
+     * @deprecated Use atCorpusPath instead.
+     */
     public get corpusPath(): string {
         return `${this.namespace || this.folder.namespace}:${this.folderPath}${this.name}`;
     }
+
     public name: string;
     /**
      * @deprecated Only for internal use.
@@ -85,10 +76,21 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
     public readonly imports: CdmImportCollection;
     public definitions: CdmDefinitionCollection;
     public importSetKey: string;
+    
     /**
      * @deprecated Use owner property instead.
      */
-    public folder: CdmFolderDefinition;
+    public get folder(): CdmFolderDefinition {
+        return this.owner as CdmFolderDefinition;
+    }
+
+    /**
+     * @deprecated Use owner property instead.
+     */
+    public set folder(value: CdmFolderDefinition) {
+        this.owner = value;
+    }
+
     /**
      * @internal
      */
@@ -125,6 +127,31 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
      * @internal
      */
     public _fileSystemModifiedTime: Date;
+    
+    /**
+     *  finds the highest required semantic version in the document and set it
+     */
+    discoverMinimumRequiredJsonSemanticVersion() : void {
+        let maxVersion = CdmObjectBase.semanticVersionStringToNumber(this.jsonSchemaSemanticVersion); // may return -1, that is fine
+
+        this.visit('', (obj: CdmObject, objPath: string) => {
+            const objectBase: CdmObjectBase = obj as CdmObjectBase;
+            // the object knows if semantics are being used that need a certain version
+            const objVersion = objectBase.getMinimumSemanticVersion();
+            if (objVersion > maxVersion) {
+                maxVersion = objVersion;
+            }
+            return false;
+        }, undefined);
+
+        this.jsonSchemaSemanticVersion = CdmObjectBase.semanticVersionNumberToString(maxVersion);
+    }
+
+    /**
+     * A list of all objects contained by this document.
+     * Only using during indexing and cleared after indexing is done.
+     */
+     private internalObjects: CdmObjectBase[];
 
     constructor(ctx: CdmCorpusContext, name: string, hasImports: boolean = false) {
         super(ctx);
@@ -133,7 +160,8 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
             this.inDocument = this;
             this.objectType = cdmObjectType.documentDef;
             this.name = name;
-            this.jsonSchemaSemanticVersion = '1.0.0';
+            // this is the default minimum version we will save, it may be set higher by a designer or during a save when making use of higher version features
+            this.jsonSchemaSemanticVersion = CdmDocumentDefinition.jsonSchemaSemanticVersionMinimumSave;
             this.documentVersion = undefined;
             this.needsIndexing = true;
             this.importsIndexed = false;
@@ -141,25 +169,236 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
             this.isDirty = true;
             this.currentlyIndexing = false;
             this.isValid = true;
-
-            this.clearCaches();
+            this.namespace = undefined;
 
             this.imports = new CdmImportCollection(ctx, this);
             this.definitions = new CdmDefinitionCollection(ctx, this);
         }
         // return p.measure(bodyCode);
     }
+
     /**
+     * Validates all the objects in this document.
+     * @internal
+     */
+     public checkIntegrity(): void {
+        // let bodyCode = () =>
+        {
+            let errorCount: number = 0;
+            for (const obj of this.internalObjects) {
+                if (!obj.validate()) {
+                    errorCount++;
+                } else {
+                    obj.ctx = this.ctx;
+                }
+                Logger.debug(this.ctx, this.TAG, this.checkIntegrity.name, obj.atCorpusPath, `checked '${obj.atCorpusPath}'`);
+            }
+
+            this.isValid = errorCount === 0;
+        }
+        // return p.measure(bodyCode);
+    }
+
+    /**
+     * Clear all document's internal caches and update the declared path of every object contained by this document.
      * @internal
      */
     public clearCaches(): void {
+        // Clean all internal caches and flags
+        this.internalObjects = [];
+        this.declarationsIndexed = false;
         this.internalDeclarations = new Map<string, CdmObjectDefinitionBase>();
-        // remove all of the cached paths
-        this.visit('', undefined, (iObject: CdmObject, path: string) => {
-            (iObject as CdmObjectBase).declaredPath = undefined;
+        this.importsIndexed = false;
+        this.importPriorities = undefined;
+
+        // Collects all the objects contained by this document and updates their DeclaredPath.
+        this.visit('', (obj: CdmObject, objPath: string) => {
+            const objectBase: CdmObjectBase = obj as CdmObjectBase;
+            // Update the DeclaredPath property.
+            objectBase.declaredPath = objPath;
+            this.internalObjects.push(objectBase);
 
             return false;
-        });
+        }, undefined);
+    }
+
+    /**
+     * Indexes all definitions contained by this document.
+     * @internal
+     */
+    public declareObjectDefinitions(): void {
+        // let bodyCode = () =>
+        {
+            const corpusPathRoot: string = this.folderPath + this.name;
+            for (const obj of this.internalObjects) {
+                // I can't think of a better time than now to make sure any recently changed or added things have an in doc
+                obj.inDocument = this;
+                const objPath = obj.declaredPath;
+
+                if (objPath.indexOf('(unspecified)') !== -1) {
+                    continue;
+                }
+                let skipDuplicates: boolean = false;
+                switch (obj.objectType) {
+                    case cdmObjectType.constantEntityDef:
+                        // if there is a duplicate, don't complain, the path just finds the first one
+                        skipDuplicates = true;
+                    case cdmObjectType.attributeGroupDef:
+                    case cdmObjectType.entityDef:
+                    case cdmObjectType.parameterDef:
+                    case cdmObjectType.traitDef:
+                    case cdmObjectType.traitGroupDef:
+                    case cdmObjectType.purposeDef:
+                    case cdmObjectType.dataTypeDef:
+                    case cdmObjectType.typeAttributeDef:
+                    case cdmObjectType.entityAttributeDef:
+                    case cdmObjectType.attributeContextDef:
+                    case cdmObjectType.localEntityDeclarationDef:
+                    case cdmObjectType.referencedEntityDeclarationDef:
+                    case cdmObjectType.projectionDef:
+                    case cdmObjectType.operationAddCountAttributeDef:
+                    case cdmObjectType.operationAddSupportingAttributeDef:
+                    case cdmObjectType.operationAddTypeAttributeDef:
+                    case cdmObjectType.operationExcludeAttributesDef:
+                    case cdmObjectType.operationArrayExpansionDef:
+                    case cdmObjectType.operationCombineAttributesDef:
+                    case cdmObjectType.operationRenameAttributesDef:
+                    case cdmObjectType.operationReplaceAsForeignKeyDef:
+                    case cdmObjectType.operationIncludeAttributesDef:
+                    case cdmObjectType.operationAddAttributeGroupDef:
+                    case cdmObjectType.operationAlterTraitsDef:
+                    case cdmObjectType.operationAddArtifactAttributeDef:
+                        const corpusPath: string = `${corpusPathRoot}/${objPath}`;
+                        if (this.internalDeclarations.has(objPath) && !skipDuplicates) {
+                            Logger.error(this.ctx, this.TAG, this.declareObjectDefinitions.name, this.atCorpusPath, cdmLogCode.ErrPathIsDuplicate, objPath, corpusPath);
+                        } else {
+                            this.internalDeclarations.set(objPath, obj as CdmObjectDefinitionBase);
+                            this.ctx.corpus.registerSymbol(objPath, this);
+
+                            Logger.debug(this.ctx, this.TAG, this.declareObjectDefinitions.name, this.atCorpusPath, `declared '${objPath}'`);
+                        }
+                    default:
+                }
+            }
+        }
+        // return p.measure(bodyCode);
+    }
+
+    /**
+     * @internal
+     */
+     public finishIndexing(loadedImports: boolean): void {
+        Logger.debug(this.ctx, this.TAG, this.finishIndexing.name, this.atCorpusPath, `index finish: ${this.atCorpusPath}`);
+
+        const wasIndexedPreviously = this.declarationsIndexed;
+
+        this.ctx.corpus.documentLibrary.markDocumentAsIndexed(this);
+        this.importsIndexed = this.importsIndexed || loadedImports;
+        this.declarationsIndexed = true;
+        this.needsIndexing = !loadedImports;
+        this.internalObjects = undefined;
+
+        // if the thisument declarations were indexed previously, do not log again.
+        if (!wasIndexedPreviously && this.isValid) {
+            for (const def of this.definitions.allItems) {
+                if (isEntityDefinition(def)) {
+                    Logger.debug(this.ctx, this.TAG, this.finishIndexing.name, def.atCorpusPath, `indexed entity: ${def.atCorpusPath}`);
+                }
+            }
+        }
+    }
+
+    /**
+     * Fetches the corresponding object definition for every object reference.
+     * @internal
+     */
+    public resolveObjectDefinitions(resOpt: resolveOptions): void {
+        // let bodyCode = () =>
+        {
+            const ctx: resolveContext = this.ctx as resolveContext;
+            resOpt.indexingDoc = this;
+
+            for (const obj of this.internalObjects) {
+                switch (obj.objectType) {
+                    case cdmObjectType.attributeRef:
+                    case cdmObjectType.attributeGroupRef:
+                    case cdmObjectType.attributeContextRef:
+                    case cdmObjectType.dataTypeRef:
+                    case cdmObjectType.entityRef:
+                    case cdmObjectType.purposeRef:
+                    case cdmObjectType.traitRef:
+                        ctx.relativePath = obj.declaredPath;
+                        const ref: CdmObjectReferenceBase = obj as CdmObjectReferenceBase;
+
+                        if (CdmObjectReferenceBase.offsetAttributePromise(ref.namedReference) < 0) {
+                            const resNew: CdmObjectDefinitionBase = ref.fetchObjectDefinition(resOpt);
+
+                            if (!resNew) {
+                                const messagePath: string = this.folderPath + obj.declaredPath;
+
+                                // It's okay if references can't be resolved when shallow validation is enabled.
+                                if (resOpt.shallowValidation) {
+                                    Logger.warning(ctx, this.TAG, this.resolveObjectDefinitions.name, this.atCorpusPath, cdmLogCode.WarnResolveReferenceFailure, ref.namedReference);
+                                } else {
+                                    Logger.error(this.ctx, this.TAG, this.resolveObjectDefinitions.name, this.atCorpusPath, cdmLogCode.ErrResolveReferenceFailure, ref.namedReference);
+                                }
+                                // don't check in this file without both of these comments. handy for debug of failed lookups
+                                //const resTest: CdmObjectDefinitionBase = ref.fetchObjectDefinition(resOpt);
+                            } else {
+                                Logger.debug(ctx, this.TAG, this.resolveObjectDefinitions.name, this.atCorpusPath, `resolved '${ref.namedReference}'`);
+                            }
+                        }
+                    default:
+                }
+            }
+
+            resOpt.indexingDoc = undefined;
+        }
+        // return p.measure(bodyCode);
+    }
+
+    /**
+     * Verifies if the trait argument data type matches what is specified on the trait definition.
+     * @internal
+     */
+    public resolveTraitArguments(resOpt: resolveOptions): void {
+        // let bodyCode = () =>
+        {
+            const ctx: resolveContext = this.ctx as resolveContext;
+            for (const obj of this.internalObjects) {
+                if (obj.objectType === cdmObjectType.traitRef) {
+                    const traitRef = obj as CdmTraitReference;
+                    const traitDef: CdmTraitDefinition = obj.fetchObjectDefinition<CdmTraitDefinition>(resOpt);
+
+                    if (!traitDef) {
+                        continue;
+                    }
+
+                    for (let argumentIndex = 0; argumentIndex < traitRef.arguments.length; ++argumentIndex) {
+                        const argument = traitRef.arguments.allItems[argumentIndex];
+                        try {
+                            ctx.relativePath = argument.declaredPath;
+
+                            const params: ParameterCollection = traitDef.fetchAllParameters(resOpt);
+                            const paramFound: CdmParameterDefinition = params.resolveParameter(argumentIndex, argument.getName());
+                            argument.resolvedParameter = paramFound;
+
+                            // if parameter type is entity, then the value should be an entity or ref to one
+                            // same is true of 'dataType' dataType
+                            const argumentValue: any = paramFound.constTypeCheck(resOpt, this, argument.value);
+                            if (argumentValue) {
+                                argument.setValue(argumentValue);
+                            }
+                        } catch (e) {
+                            Logger.error(this.ctx, this.TAG, this.resolveTraitArguments.name, this.atCorpusPath, cdmLogCode.ErrTraitResolutionFailure, (e as Error).toString(), traitDef.getName());
+                        }
+                    }
+
+                    traitRef.resolvedArguments = true;
+                }
+            }
+        }
+        // return p.measure(bodyCode);
     }
 
     /**
@@ -170,16 +409,9 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
         let allWentWell: boolean = true;
         let worked: boolean;
         let corpPath: string;
-        const wasBlocking: boolean = this.ctx.corpus.blockDeclaredPathChanges;
-        this.ctx.corpus.blockDeclaredPathChanges = true;
 
         // shout into the void
-        Logger.info(
-            CdmDocumentDefinition.name,
-            this.ctx,
-            `Localizing corpus paths in document '${this.name}'`,
-            this.localizeCorpusPaths.name
-        );
+        Logger.debug(this.ctx, this.TAG, this.localizeCorpusPaths.name, this.atCorpusPath, `Localizing corpus paths in document '${this.name}'`);
 
         // find anything in the document that is a corpus path
         this.visit(
@@ -276,8 +508,6 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
             },
             undefined);
 
-        this.ctx.corpus.blockDeclaredPathChanges = wasBlocking;
-
         return allWentWell;
     }
 
@@ -291,6 +521,10 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
 
     public fetchObjectDefinition<T = CdmObjectDefinition>(resOpt: resolveOptions): T {
         return undefined;
+    }
+
+    public fetchObjectDefinitionName(): string {
+        return this.name;
     }
 
     public copy(resOpt?: resolveOptions, host?: CdmObject): CdmObject {
@@ -340,12 +574,8 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
         // let bodyCode = () =>
         {
             if (!this.name) {
-                Logger.error(
-                    CdmDocumentDefinition.name,
-                    this.ctx,
-                    Errors.validateErrorString(this.atCorpusPath, ['name']),
-                    this.validate.name);
-
+                let missingFields: string[] = ['name'];
+                Logger.error(this.ctx, this.TAG, this.validate.name, this.atCorpusPath, cdmLogCode.ErrValdnIntegrityCheckFailure, missingFields.map((s: string) => `'${s}'`).join(', '), this.atCorpusPath);
                 return false;
             }
 
@@ -384,6 +614,9 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
         // return p.measure(bodyCode);
     }
 
+    /**
+     * @deprecated Access 'name' member directly.
+     */
     public getName(): string {
         // let bodyCode = () =>
         {
@@ -420,14 +653,14 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
     }
 
     public getFolder(): CdmFolderDefinition {
-        return this.folder;
+        return this.owner as CdmFolderDefinition;
     }
 
     public get atCorpusPath(): string {
-        if (!this.folder) {
+        if (!this.owner) {
             return `NULL:/${this.name}`;
         } else {
-            return `${this.folder.atCorpusPath}${this.name}`;
+            return `${this.owner.atCorpusPath}${this.name}`;
         }
     }
 
@@ -436,6 +669,11 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
         {
             if (preChildren && preChildren(this, pathFrom)) {
                 return false;
+            }
+            if (this.imports) {
+                if (this.imports.visitArray(pathFrom, preChildren, postChildren)) {
+                    return true;
+                }
             }
             if (this.definitions) {
                 if (this.definitions.visitArray(pathFrom, preChildren, postChildren)) {
@@ -460,30 +698,46 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
      * returns false on any failure
      */
     public async saveAsAsync(newName: string, saveReferenced: boolean = false, options?: copyOptions): Promise<boolean> {
-        if (!options) {
-            options = new copyOptions();
-        }
-        const resOpt: resolveOptions = new resolveOptions(this, this.ctx.corpus.defaultResolutionDirectives);
-        if (!await this.indexIfNeeded(resOpt)) {
-            Logger.error(
-                CdmDocumentDefinition.name,
-                this.ctx,
-                `Failed to index document prior to save '${this.name}'`,
-                this.saveAsAsync.name
-            );
+        return await using(enterScope(CdmDocumentDefinition.name, this.ctx, this.saveAsAsync.name), async _ => {
+            if (!options) {
+                options = new copyOptions();
+            }
+            const resOpt: resolveOptions = new resolveOptions(this, this.ctx.corpus.defaultResolutionDirectives);
+            if (!await this.indexIfNeeded(resOpt)) {
+                Logger.error(this.ctx, this.TAG, this.saveAsAsync.name, this.atCorpusPath, cdmLogCode.ErrIndexFailed, this.name);
+                return false;
+            }
+            // if save to the same document name, then we are no longer 'dirty'
+            if (newName === this.name) {
+                this.isDirty = false;
+            }
 
-            return false;
-        }
-        // if save to the same document name, then we are no longer 'dirty'
-        if (newName === this.name) {
-            this.isDirty = false;
-        }
+            if (await this.ctx.corpus.persistence.saveDocumentAsAsync(this, options, newName, saveReferenced) === false) {
+                return false;
+            }
 
-        if (await this.ctx.corpus.persistence.saveDocumentAsAsync(this, options, newName, saveReferenced) === false) {
-            return false;
-        }
+            if (this instanceof CdmManifestDefinition) {
+                for (const entity of (this as CdmManifestDefinition).entities) {
+                    if (entity instanceof CdmLocalEntityDeclarationDefinition) {
+                      (entity as CdmLocalEntityDeclarationDefinition).resetLastFileModifiedOldTime();
+                    }
+                    for (const relationship of (this as CdmManifestDefinition).relationships) {
+                      relationship.resetLastFileModifiedOldTime();
+                    }
+                }
+                // Log the telemetry if the document is a manifest
+                Logger.ingestManifestTelemetry(this as CdmManifestDefinition, this.ctx, this.TAG, this.saveAsAsync.name, this.atCorpusPath);
+            } else {
+                // Log the telemetry of all entities contained in the document
+                for (const obj of this.definitions) {
+                    if (obj instanceof CdmEntityDefinition) {
+                        Logger.ingestEntityTelemetry(obj as CdmEntityDefinition, this.ctx, this.TAG, this.saveAsAsync.name, obj.atCorpusPath);
+                    }
+                }
+            }
 
-        return true;
+            return true;
+        });
     }
 
     public async refreshAsync(resOpt: resolveOptions): Promise<boolean> {
@@ -492,8 +746,6 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
         }
 
         this.needsIndexing = true;
-        this.importPriorities = undefined;
-        this.importsIndexed = false;
         this.declarationsIndexed = false;
         this.isValid = true;
 
@@ -507,32 +759,36 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
     public async indexIfNeeded(resOpt: resolveOptions, loadImports: boolean = false): Promise<boolean> {
         // let bodyCode = () =>
         {
-            if (this.needsIndexing && !this.currentlyIndexing) {
-                if (!this.folder) {
-                    Logger.error(CdmDocumentDefinition.name, this.ctx, `Document '${this.name}' is not in a folder`, this.indexIfNeeded.name);
-                    return false;
-                }
-
-                const corpus: CdmCorpusDefinition = this.folder.corpus;
-
-                // if the imports load strategy is "lazyLoad", loadImports value will be the one sent by the called function.
-                if (resOpt.importsLoadStrategy === importsLoadStrategy.doNotLoad) {
-                    loadImports = false;
-                } else if (resOpt.importsLoadStrategy === importsLoadStrategy.load) {
-                    loadImports = true;
-                }
-
-                if (loadImports) {
-                    await corpus.resolveImportsAsync(this, resOpt);
-                }
-
-                // make the corpus internal machinery pay attention to this document for this call.
-                corpus.documentLibrary.markDocumentForIndexing(this);
-
-                return corpus.indexDocuments(resOpt, loadImports);
+            if (!this.owner) {
+                Logger.error(this.ctx, this.TAG, this.indexIfNeeded.name, this.atCorpusPath, cdmLogCode.ErrValdnMissingDoc, this.name);
+                return false;
             }
 
-            return true;
+            const corpus: CdmCorpusDefinition = (this.owner as CdmFolderDefinition).corpus;
+            const needsIndexing = corpus.documentLibrary.markDocumentForIndexing(this);
+
+            if (!needsIndexing) {
+                return true;
+            }
+
+            // if the imports load strategy is "lazyLoad", loadImports value will be the one sent by the called function.
+            if (resOpt.importsLoadStrategy === importsLoadStrategy.doNotLoad) {
+                loadImports = false;
+            } else if (resOpt.importsLoadStrategy === importsLoadStrategy.load) {
+                loadImports = true;
+            }
+
+            // make the internal machinery pay attention to this document for this call.
+            const docsLoading: Set<string> = new Set([ this.atCorpusPath ]);
+
+            if (loadImports) {
+                await corpus.resolveImportsAsync(this, docsLoading, resOpt);
+            }
+
+            // make the corpus internal machinery pay attention to this document for this call.
+            corpus.documentLibrary.markDocumentForIndexing(this);
+
+            return corpus.indexDocuments(resOpt, loadImports, this, docsLoading);
         }
         // return p.measure(bodyCode);
     }
@@ -576,9 +832,8 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
 
                 // work backward until we find something in this document
                 let lastObj: number = objectPath.lastIndexOf('/(object)');
-                let thisDocPart: string = objectPath;
                 while (lastObj > 0) {
-                    thisDocPart = objectPath.slice(0, lastObj);
+                    const thisDocPart: string = objectPath.slice(0, lastObj);
                     if (this.internalDeclarations.has(thisDocPart)) {
                         const thisDocObjRef: CdmObjectReferenceBase = this.internalDeclarations.get(thisDocPart) as CdmObjectReferenceBase;
                         const thatDocObjDef: CdmObjectDefinitionBase = thisDocObjRef.fetchObjectDefinition(resOpt);
@@ -625,17 +880,16 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
             for (const imp of this.imports) {
                 // get the document object from the import
                 const docPath: string = this.ctx.corpus.storage.createAbsoluteCorpusPath(imp.corpusPath, this);
-                const docImp: CdmDocumentDefinition = await this.ctx.corpus.fetchObjectAsync<CdmDocumentDefinition>(docPath);
+                let docImp: CdmDocumentDefinition = await this.ctx.corpus.fetchObjectAsync<CdmDocumentDefinition>(docPath);
+                if (!isDocumentDefinition(docImp)) {
+                    Logger.error(this.ctx, this.TAG, this.saveLinkedDocuments.name, this.atCorpusPath, cdmLogCode.ErrInvalidCast, docPath, "CdmDocumentDefinition");
+                    docImp = undefined;
+                }
+
                 if (docImp !== undefined && docImp.isDirty) {
                     // save it with the same name
                     if (await docImp.saveAsAsync(docImp.name, true, options) === false) {
-                        Logger.error(
-                            'CdmDocumentDefinition',
-                            this.ctx,
-                            `Foiled to save import ${docImp.name}`,
-                            this.saveLinkedDocuments.name
-                        );
-
+                        Logger.error(this.ctx, this.TAG, this.saveLinkedDocuments.name, docImp.atCorpusPath, cdmLogCode.ErrDocImportSavingFailure, this.name);
                         return false;
                     }
                 }
@@ -660,7 +914,7 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
         if (!oldFolder) {
             newPath = this.ctx.corpus.storage.createRelativeCorpusPath(path, newFolder);
         } else {
-            // if the current value != the absolute path, then assume it is a relative path
+            // if the current value !== the absolute path, then assume it is a relative path
             const absPath: string = this.ctx.corpus.storage.createAbsoluteCorpusPath(path, oldFolder);
             if (absPath === path) {
                 newPath = absPath; // leave it alone
@@ -714,8 +968,8 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
             for (const imp of revImp) {
                 const impDoc: CdmDocumentDefinition = imp.document;
 
+                // moniker imports will be added to the end of the priority list later.
                 if (impDoc) {
-                    // moniker imports will be added to the end of the priority list later.
                     if (imp.document && !imp.moniker && !priorityMap.has(impDoc)) {
                         // add doc.
                         priorityMap.set(impDoc, new ImportInfo(sequence, false));
@@ -724,7 +978,7 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
                         monikerImports.push(impDoc);
                     }
                 } else {
-                    Logger.warning(CdmDocumentDefinition.name, this.ctx, `Import document ${imp.corpusPath} not loaded. This might cause an unexpected output.`);
+                    Logger.warning(this.ctx, this.TAG, this.prioritizeImports.name, imp.atCorpusPath, cdmLogCode.WarnDocImportNotLoaded, imp.corpusPath);
                 }
             }
 
@@ -734,7 +988,7 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
                 const isMoniker: boolean = !!imp.moniker;
 
                 if (!impDoc) {
-                    Logger.warning(CdmDocumentDefinition.name, this.ctx, `Import document ${imp.corpusPath} not loaded. This might cause an unexpected output.`);
+                    Logger.warning(this.ctx, this.TAG, this.prioritizeImports.name, imp.atCorpusPath, cdmLogCode.WarnDocImportNotLoaded, imp.corpusPath);
                 }
 
                 // if the document has circular imports its order on the impDoc.ImportPriorities list is not correct.
@@ -790,5 +1044,64 @@ export class CdmDocumentDefinition extends cdmObjectSimple implements CdmDocumen
         }
 
         return sequence;
+    }
+
+    /**
+     * @internal
+     */
+    public importPathToDoc(docDest: CdmDocumentDefinition): string {
+        const avoidLoop: Set<CdmDocumentDefinition> = new Set<CdmDocumentDefinition>();
+        const internalImportPathToDoc: (docCheck: CdmDocumentDefinition, path: string) => string
+            = (docCheck: CdmDocumentDefinition, path: string): string => {
+                if (docCheck === docDest) {
+                    return '';
+                }
+                if (avoidLoop.has(docCheck)) {
+                    return undefined;
+                }
+                avoidLoop.add(docCheck);
+                // if the docDest is one of the monikered imports of docCheck, then add the moniker and we are cool
+                if (docCheck.importPriorities && docCheck.importPriorities.monikerPriorityMap && docCheck.importPriorities.monikerPriorityMap.size > 0) {
+                    for (const monPair of docCheck.importPriorities.monikerPriorityMap) {
+                        if (monPair[1] === docDest) {
+                            return `${path}${monPair[0]}/`;
+                        }
+                    }
+                }
+                // ok, what if the document can be reached directly from the imports here
+                let impInfo: ImportInfo;
+                if (docCheck.importPriorities && docCheck.importPriorities.importPriority && !docCheck.importPriorities.importPriority.has(docDest)) {
+                    impInfo = undefined;
+                }
+                if (impInfo && !impInfo.isMoniker) {
+                    // good enough
+                    return path;
+                }
+
+                // still nothing, now we need to check those docs deeper
+                if (docCheck.importPriorities && docCheck.importPriorities.monikerPriorityMap && docCheck.importPriorities.monikerPriorityMap.size > 0) {
+                    for (const monPair of docCheck.importPriorities.monikerPriorityMap) {
+                        const pathFound: string = internalImportPathToDoc(monPair[1], `${path}${monPair[0]}/`);
+                        if (pathFound !== undefined) {
+                            return pathFound;
+                        }
+                    }
+                }
+                if (docCheck.importPriorities && docCheck.importPriorities.importPriority && docCheck.importPriorities.importPriority.size > 0) {
+                    for (const impInfoPair of docCheck.importPriorities.importPriority) {
+                        if (!impInfoPair[1].isMoniker) {
+                            const pathFound: string = internalImportPathToDoc(impInfoPair[0], path);
+                            if (pathFound) {
+                                return pathFound;
+                            }
+                        }
+                    }
+                }
+                return undefined;
+
+            };
+
+        return internalImportPathToDoc(this, '');
+
     }
 }

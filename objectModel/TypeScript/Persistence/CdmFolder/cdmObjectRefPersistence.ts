@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-import { CdmObjectReference, cdmObjectType, CdmTraitReference, copyOptions, identifierRef, resolveOptions } from '../../internal';
+import { CdmObjectReference, cdmObjectType, CdmTraitReference, copyOptions, identifierRef, resolveOptions, StringUtils } from '../../internal';
 import * as copyDataUtils from '../../Utilities/CopyDataUtils';
 import {
     Argument,
@@ -15,6 +15,8 @@ import {
     Purpose,
     PurposeReference,
     Trait,
+    TraitGroup,
+    TraitGroupReference,
     TraitReference
 } from './types';
 import * as utils from './utils';
@@ -24,7 +26,7 @@ export class cdmObjectRefPersistence {
         // We don't know what object we are creating to initialize to any
         // tslint:disable-next-line:no-any
         let copy: any = {};
-        if (instance.namedReference) {
+        if (!StringUtils.isBlankByCdmStandard(instance.namedReference)) {
             const identifier: (string | identifierRef)
                 = utils.copyIdentifierRef(instance, resOpt, options);
             if (instance.simpleNamedReference) {
@@ -41,6 +43,11 @@ export class cdmObjectRefPersistence {
                 copy = replace;
             }
         }
+
+        if (instance.optional !== undefined) {
+            copy.optional = instance.optional;
+        }
+
         if (instance.appliedTraits.length > 0) {
             // We don't know if the object we are copying has applied traits or not and hence use any
             // tslint:disable-next-line:no-any
@@ -72,8 +79,13 @@ export class cdmObjectRefPersistence {
                 const traitRef: TraitReference = copy as TraitReference;
                 traitRef.traitReference = refTo as string | Trait;
                 traitRef.arguments = copyDataUtils.arrayCopyData<Argument>(resOpt, (instance as CdmTraitReference).arguments, options);
-
+                traitRef.verb = (instance as CdmTraitReference).verb ? (instance as CdmTraitReference).verb.copyData(resOpt, options) as (string | TraitReference) : undefined;
                 return traitRef;
+            case cdmObjectType.traitGroupRef:
+                const traitGroupRef: TraitGroupReference = copy as TraitGroupReference;
+                traitGroupRef.traitGroupReference = refTo as string | TraitGroup;
+
+                return traitGroupRef;
             default:
                 return undefined;
         }

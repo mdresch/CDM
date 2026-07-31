@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
@@ -30,6 +30,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
             }
             return argument;
         }
+
         public static dynamic ToData(CdmArgumentDefinition instance, ResolveOptions resOpt, CopyOptions options)
         {
             dynamic val = null;
@@ -39,7 +40,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
                 {
                     val = (string)instance.Value;
                 }
-                else if(instance.Value is CdmObject) 
+                else if (instance.Value is CdmObject)
                 {
                     val = ((CdmObject)instance.Value).CopyData(resOpt, options);
                 }
@@ -49,10 +50,11 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
                 }
             }
             // skip the argument if just a value
-            if (string.IsNullOrEmpty(instance.Name))
+            if (StringUtils.IsBlankByCdmStandard(instance.Name))
                 return val;
 
-            return new Argument {
+            return new Argument
+            {
                 Explanation = instance.Explanation,
                 Name = instance.Name,
                 Value = JToken.FromObject(val, JsonSerializationUtil.JsonSerializer)

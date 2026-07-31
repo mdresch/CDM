@@ -12,9 +12,12 @@ import com.microsoft.commondatamodel.objectmodel.utilities.network.CdmHttpReques
 import com.microsoft.commondatamodel.objectmodel.utilities.network.CdmHttpResponse;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
@@ -24,7 +27,7 @@ import java.util.stream.Collectors;
  * Please see GithubAdapter, AdlsAdapter or RemoteAdapter for usage of this class.
  * When extending this class a user has to define CdmHttpClient with the specified endpoint and callback function in the constructor
  * and can then use the class helper methods to set up Cdm HTTP requests and read data.
- * If a user doesn't specify timeout, maximutimeout or number of retries in the config under 'httpConfig' property
+ * If a user doesn't specify timeout, maximumTimeout or number of retries in the config under 'httpConfig' property
  * default values will be used as specified in the class.
  */
 public abstract class NetworkAdapter extends StorageAdapterBase {
@@ -37,7 +40,12 @@ public abstract class NetworkAdapter extends StorageAdapterBase {
   protected Duration timeout = DEFAULT_TIMEOUT;
   protected Duration maximumTimeout = DEFAULT_MAXIMUM_TIMEOUT;
   protected int numberOfRetries = DEFAULT_NUMBER_OF_RETRIES;
-  protected CdmHttpClient.Callback waitTimeCallback = NetworkAdapter::defaultCallback;
+  protected CdmHttpClient.Callback waitTimeCallback = this::defaultCallback;
+
+  /**
+   * A set of HttpStatusCodes that will stop the retry logic if the HTTP response has one of these types.
+   */
+  public Set<Integer> avoidRetryCodes = new LinkedHashSet<Integer>(Arrays.asList(404));
 
   public CdmHttpClient getHttpClient() {
     return httpClient;
@@ -83,6 +91,17 @@ public abstract class NetworkAdapter extends StorageAdapterBase {
    * Sets up the CDM request that can be used by CDM Http Client.
    *
    * @param path    The partial or full path to a network location.
+   * @param method  The method.
+   * @return A CdmHttpRequest object, representing the CDM Http request.
+   */
+  CdmHttpRequest setUpCdmRequest(final String path, final String method) {
+    return setUpCdmRequest(path, null, method);
+  }
+
+  /**
+   * Sets up the CDM request that can be used by CDM Http Client.
+   *
+   * @param path    The partial or full path to a network location.
    * @param headers The headers.
    * @param method  The method.
    * @return A CdmHttpRequest object, representing the CDM Http request.
@@ -101,7 +120,7 @@ public abstract class NetworkAdapter extends StorageAdapterBase {
   CompletableFuture<CdmHttpResponse> executeRequest(final CdmHttpRequest request) {
     return CompletableFuture.supplyAsync(() -> {
       try {
-        final CdmHttpResponse response = this.httpClient.sendAsync(request, this.waitTimeCallback).get();
+        final CdmHttpResponse response = this.httpClient.sendAsync(request, this.waitTimeCallback, this.getCtx()).get();
         if (response == null) {
           return null;
         }
@@ -115,7 +134,7 @@ public abstract class NetworkAdapter extends StorageAdapterBase {
                       .stream()
                       .map(entry -> entry + entry.getKey() + ":" + entry.getValue())
                       .collect(Collectors.joining(",")),
-                  request.getRequestedUrl()
+                  request.stripSasSig()
               )
           );
         }
@@ -134,8 +153,8 @@ public abstract class NetworkAdapter extends StorageAdapterBase {
    * @param retryNumber The current retry number (starts from 1) up to the number of retries specified by CDM request.
    * @return A duration object, specifying the waiting time, or null if no wait time is necessary.
    */
-  private static Duration defaultCallback(final CdmHttpResponse response, final boolean hasFailed, final int retryNumber) {
-    if (response != null && response.isSuccessful() && !hasFailed) {
+  private Duration defaultCallback(final CdmHttpResponse response, final boolean hasFailed, final int retryNumber) {
+    if (response != null && ((response.isSuccessful() && !hasFailed) || this.avoidRetryCodes.contains(response.getStatusCode()))) {
       return null;
     } else {
       final Random random = new Random();

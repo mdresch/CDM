@@ -1,14 +1,15 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-import { 
+import {
     CdmCorpusDefinition,
     CdmDocumentDefinition,
     CdmManifestDefinition,
-    cdmStatusLevel,
     resolveOptions,
     importsLoadStrategy,
-    StorageAdapter
+    cdmLogCode,
+    copyOptions,
+    cdmRelationshipDiscoveryStyle
 } from '../../internal';
 import { LocalAdapter } from '../../Storage';
 import { testHelper } from '../testHelper';
@@ -24,12 +25,13 @@ describe('Cdm/ImportsTest', () => {
      * Does not fail with a missing import
      */
     it('TestEntityWithMissingImport', async () => {
-        const localAdapter: LocalAdapter = createStorageAdapterForTest('TestEntityWithMissingImport');
-        const cdmCorpus: CdmCorpusDefinition = createTestCorpus(localAdapter);
+        const expectedLogCodes = new Set<cdmLogCode>([cdmLogCode.ErrPersistFileReadFailure, cdmLogCode.WarnResolveImportFailed, cdmLogCode.WarnDocImportNotLoaded]);
+        const cdmCorpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestEntityWithMissingImport', undefined, false, expectedLogCodes);
+
         const resOpt = new resolveOptions();
         resOpt.importsLoadStrategy = importsLoadStrategy.load;
 
-        const doc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('local:/missingImport.cdm.json', null, resOpt);
+        const doc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('local:/missingImport.cdm.json', undefined, resOpt);
         expect(doc)
             .not
             .toBeUndefined();
@@ -45,12 +47,13 @@ describe('Cdm/ImportsTest', () => {
      * Does not fail with a missing nested import
      */
     it('TestEntityWithMissingNestedImportsAsync', async () => {
-        const localAdapter: LocalAdapter = createStorageAdapterForTest('TestEntityWithMissingNestedImportsAsync');
-        const cdmCorpus: CdmCorpusDefinition = createTestCorpus(localAdapter);
+        const expectedLogCodes = new Set<cdmLogCode>([cdmLogCode.ErrPersistFileReadFailure, cdmLogCode.WarnResolveImportFailed, cdmLogCode.WarnDocImportNotLoaded]);
+        const cdmCorpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestEntityWithMissingNestedImportsAsync', undefined, false, expectedLogCodes);
+
         const resOpt = new resolveOptions();
         resOpt.importsLoadStrategy = importsLoadStrategy.load;
 
-        const doc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('local:/missingNestedImport.cdm.json', null, resOpt);
+        const doc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('local:/missingNestedImport.cdm.json', undefined, resOpt);
         expect(doc)
             .not
             .toBeUndefined();
@@ -70,13 +73,12 @@ describe('Cdm/ImportsTest', () => {
      * Testing loading where import is listed multiple times in different files
      */
     it('TestEntityWithSameImportsAsync', async () => {
-        const localAdapter: LocalAdapter = createStorageAdapterForTest('TestEntityWithSameImportsAsync');
-        const cdmCorpus: CdmCorpusDefinition = createTestCorpus(localAdapter);
+        const expectedLogCodes = new Set<cdmLogCode>([cdmLogCode.ErrPersistFileReadFailure, cdmLogCode.WarnResolveImportFailed, cdmLogCode.WarnDocImportNotLoaded]);
+        const cdmCorpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestEntityWithSameImportsAsync', undefined, false, expectedLogCodes);
         const resOpt = new resolveOptions();
         resOpt.importsLoadStrategy = importsLoadStrategy.load;
 
-
-        const doc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('local:/multipleImports.cdm.json', null, resOpt);
+        const doc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('local:/multipleImports.cdm.json', undefined, resOpt);
         expect(doc)
             .not
             .toBeUndefined();
@@ -96,20 +98,20 @@ describe('Cdm/ImportsTest', () => {
      * Testing an import with a non-existing namespace name.
      */
     it('TestNonExistingAdapterNamespace', async () => {
-        const localAdapter: LocalAdapter = createStorageAdapterForTest('TestNonExistingAdapterNamespace');
-        const cdmCorpus: CdmCorpusDefinition = createTestCorpus(localAdapter);
-        cdmCorpus.storage.mount('erp', localAdapter);
+        const expectedLogCodes = new Set<cdmLogCode>([cdmLogCode.ErrPersistFileReadFailure]);
+        const cdmCorpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestNonExistingAdapterNamespace', undefined, false, expectedLogCodes);
+
+        cdmCorpus.storage.mount('erp', new LocalAdapter(testHelper.getInputFolderPath(testsSubpath, 'TestNonExistingAdapterNamespace')));
 
         // Set local as our default.
         cdmCorpus.storage.defaultNamespace = 'erp';
 
         const manifestPath: string = cdmCorpus.storage.createAbsoluteCorpusPath('erp.missingImportManifest.cdm');
-        const rootManifest: CdmManifestDefinition = await cdmCorpus.createRootManifest(manifestPath);
 
         // Load a manifest that is trying to import from 'cdm' namespace.
         // The manifest does't exist since the import couldn't get resolved,
         // so the error message will be logged and the null value will be propagated back to a user.
-        expect(rootManifest)
+        expect(await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('erp.missingImportManifest.cdm', undefined, undefined))
             .toBeUndefined();
     });
 
@@ -117,12 +119,11 @@ describe('Cdm/ImportsTest', () => {
      * Testing docs that load the same import
      */
     it('TestLoadingSameImportsAsync', async () => {
-        const localAdapter: LocalAdapter = createStorageAdapterForTest('TestLoadingSameImportsAsync');
-        const cdmCorpus: CdmCorpusDefinition = createTestCorpus(localAdapter);
+        const cdmCorpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestLoadingSameImportsAsync');
         const resOpt = new resolveOptions();
         resOpt.importsLoadStrategy = importsLoadStrategy.load;
 
-        const mainDoc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('mainEntity.cdm.json', null, resOpt);
+        const mainDoc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('mainEntity.cdm.json', undefined, resOpt);
         expect(mainDoc)
             .not
             .toBeUndefined();
@@ -149,12 +150,13 @@ describe('Cdm/ImportsTest', () => {
      * Testing docs that load the same import of which, the file cannot be found
      */
     it('TestLoadingSameMissingImportsAsync', async () => {
-        const localAdapter: LocalAdapter = createStorageAdapterForTest('TestLoadingSameMissingImportsAsync');
-        const cdmCorpus: CdmCorpusDefinition = createTestCorpus(localAdapter);
+        const expectedLogCodes = new Set<cdmLogCode>([cdmLogCode.ErrPersistFileReadFailure, cdmLogCode.WarnResolveImportFailed, cdmLogCode.WarnDocImportNotLoaded]);
+        const cdmCorpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestLoadingSameMissingImportsAsync', undefined, false, expectedLogCodes);
+
         const resOpt = new resolveOptions();
         resOpt.importsLoadStrategy = importsLoadStrategy.load;
 
-        const mainDoc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('mainEntity.cdm.json', null, resOpt);
+        const mainDoc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('mainEntity.cdm.json', undefined, resOpt);
         expect(mainDoc)
             .not
             .toBeUndefined();
@@ -180,13 +182,12 @@ describe('Cdm/ImportsTest', () => {
      * Testing doc that loads an import that has already been loaded before
      */
     it('TestLoadingAlreadyPresentImportsAsync', async () => {
-        const localAdapter: LocalAdapter = createStorageAdapterForTest('TestLoadingAlreadyPresentImportsAsync');
-        const cdmCorpus: CdmCorpusDefinition = createTestCorpus(localAdapter);
+        const cdmCorpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestLoadingAlreadyPresentImportsAsync');
         const resOpt = new resolveOptions();
         resOpt.importsLoadStrategy = importsLoadStrategy.load;
 
         // load the first doc
-        const mainDoc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('mainEntity.cdm.json', null, resOpt);
+        const mainDoc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('mainEntity.cdm.json', undefined, resOpt);
         expect(mainDoc)
             .not
             .toBeUndefined();
@@ -199,7 +200,7 @@ describe('Cdm/ImportsTest', () => {
 
         // now load the second doc, which uses the same import
         // the import should not be loaded again, it should be the same object
-        const secondDoc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('secondEntity.cdm.json', null, resOpt);
+        const secondDoc: CdmDocumentDefinition = await cdmCorpus.fetchObjectAsync<CdmDocumentDefinition>('secondEntity.cdm.json', undefined, resOpt);
         expect(secondDoc)
             .not
             .toBeUndefined();
@@ -214,20 +215,59 @@ describe('Cdm/ImportsTest', () => {
             .toBe(secondImportDoc);
     });
 
-    function createTestCorpus(adapter: StorageAdapter): CdmCorpusDefinition {
-        const cdmCorpus: CdmCorpusDefinition = new CdmCorpusDefinition();
-        cdmCorpus.storage.mount('local', adapter);
-        cdmCorpus.storage.defaultNamespace = 'local';
+    /**
+     * Testing that import priorites update correctly when imports are changed
+     */
+    it('TestPrioritizingImportsAfterEdit', async () => {
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestPrioritizingImportsAfterEdit');
 
-        // Set empty callback to avoid breaking tests due too many errors in logs,
-        // change the event callback to console or file status report if wanted.
-        // tslint:disable-next-line: no-empty
-        cdmCorpus.setEventCallback(() => { }, cdmStatusLevel.error);
+        var document = await corpus.fetchObjectAsync<CdmDocumentDefinition>('local:/mainDoc.cdm.json');
+        await document.refreshAsync(new resolveOptions(document));
 
-        return cdmCorpus;
-    }
+        expect(document.imports.length)
+            .toEqual(0);
+        // the current doc itself is added to the list of priorities
+        expect(document.importPriorities.importPriority.size)
+            .toEqual(1);
 
-    function createStorageAdapterForTest(testName: string): LocalAdapter {
-        return new LocalAdapter(testHelper.getInputFolderPath(testsSubpath, testName));
-    }
+        document.imports.push('importDoc.cdm.json', true);
+        await document.refreshAsync(new resolveOptions(document));
+
+        expect(document.imports.length)
+            .toEqual(1);
+        expect(document.importPriorities.importPriority.size)
+            .toEqual(2);
+    });
+
+    /**
+     * Testing that import for elevated purpose traits for relationships are added.
+     */
+    it('TestImportsForRelElevatedPurposeTraits', async () => {
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestImportsForRelElevatedPurposeTraits');
+        var rootManifest = await corpus.fetchObjectAsync<CdmManifestDefinition>('local:/default.manifest.cdm.json');
+        var subManifest = await corpus.fetchObjectAsync<CdmManifestDefinition>(rootManifest.subManifests.allItems[0].definition);
+
+        await corpus.calculateEntityGraphAsync(rootManifest);
+        await rootManifest.populateManifestRelationshipsAsync(cdmRelationshipDiscoveryStyle.exclusive);
+
+        expect(rootManifest.imports.allItems[0].corpusPath)
+            .toEqual('specialized/Gold.cdm.json');
+        expect(subManifest.imports.allItems[0].corpusPath)
+            .toEqual('/Lead.cdm.json');
+
+        corpus.storage.fetchRootFolder('output').documents.push(rootManifest);
+        corpus.storage.fetchRootFolder('output').documents.push(subManifest);
+        var co = new copyOptions();
+        co.saveConfigFile = false;
+        await rootManifest.saveAsAsync('output:/default.manifest.cdm.json', false, co);
+        // "acct.trait" in Acct.cdm.json. relationships in the manifests contain these 2 traits,
+        // so the manifest should import these two entity documents, but Lead.cdm.json imports Acct.cdm.json.
+        // Thus, the manifest can only import Lead.cdm.json
+        await subManifest.saveAsAsync('output:/default-submanifest.manifest.cdm.json', false, co);
+
+        // Compare the result.
+        testHelper.assertFolderFilesEquality(
+            testHelper.getExpectedOutputFolderPath(testsSubpath, 'TestImportsForRelElevatedPurposeTraits'),
+            testHelper.getActualOutputFolderPath(testsSubpath, 'TestImportsForRelElevatedPurposeTraits'));
+    });
 });

@@ -6,15 +6,18 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Storage
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
-    using System.IO;
+    using System.Net;
     using System.Threading.Tasks;
     using Microsoft.CommonDataModel.ObjectModel.Cdm;
+    using Microsoft.CommonDataModel.ObjectModel.Enums;
     using Microsoft.CommonDataModel.ObjectModel.Storage;
+    using Microsoft.CommonDataModel.ObjectModel.Tests.Storage.TestAdapters;
+    using Microsoft.CommonDataModel.ObjectModel.Utilities;
     using Microsoft.CommonDataModel.ObjectModel.Utilities.Network;
     using Microsoft.VisualStudio.TestTools.UnitTesting;
-    using Newtonsoft.Json;
+    using Moq;
     using Newtonsoft.Json.Linq;
-
+    using static Microsoft.CommonDataModel.ObjectModel.Utilities.Network.CdmHttpClient;
     using Assert = AssertExtension;
 
     [TestClass]
@@ -27,7 +30,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Storage
                 return "TOKEN";
             }
         }
-        
+
         private readonly string testSubpath = "Storage";
 
         private static async Task RunWriteReadTest(ADLSAdapter adapter)
@@ -38,7 +41,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Storage
             string readContents = await adapter.ReadAsync(filename);
             Assert.IsTrue(string.Equals(writeContents, readContents));
         }
-        
+
         private static async Task RunCheckFileTimeTest(ADLSAdapter adapter)
         {
             DateTimeOffset? offset1 = await adapter.ComputeLastModifiedTimeAsync("/FileTimeTest/CheckFileTime.txt");
@@ -116,6 +119,21 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Storage
         }
 
         [TestMethod]
+        public async Task ADLSWriteReadClientIdWithEndpoint()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+            await RunWriteReadTest(AdlsTestHelper.CreateAdapterWithClientId(specifyEndpoint: true));
+        }
+
+        [TestMethod]
+        public async Task ADLSWriteReadWithBlobHostName()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+            await RunWriteReadTest(AdlsTestHelper.CreateAdapterWithSharedKey(testBlobHostName: true));
+            await RunWriteReadTest(AdlsTestHelper.CreateAdapterWithClientId(testBlobHostName: true));
+        }
+
+        [TestMethod]
         public async Task ADLSCheckFileTimeSharedKey()
         {
             AdlsTestHelper.CheckADLSEnvironment();
@@ -148,6 +166,99 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Storage
         {
             AdlsTestHelper.CheckADLSEnvironment();
             await RunSpecialCharactersTest(AdlsTestHelper.CreateAdapterWithClientId("PathWithSpecialCharactersAndUnescapedStringTest/Root-With=Special Characters:"));
+        }
+
+
+        /// <summary>
+        /// Tests if the adapter won't retry if a HttpStatusCode response with a code in AvoidRetryCodes is received.
+        /// </summary>
+        /// <returns></returns>
+        [TestMethod]
+        public async Task TestAvoidRetryCodes()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+            var adlsAdapter = AdlsTestHelper.CreateAdapterWithSharedKey();
+            adlsAdapter.NumberOfRetries = 3;
+
+            var corpus = new CdmCorpusDefinition();
+            corpus.Storage.Mount("adls", adlsAdapter);
+            var count = 0;
+            corpus.SetEventCallback(new EventCallback
+            {
+                Invoke = (status, message) =>
+                {
+                    if (message.Contains("Response for request "))
+                    {
+                        count++;
+                    }
+                }
+            }, CdmStatusLevel.Progress);
+
+            await corpus.FetchObjectAsync<CdmDocumentDefinition>("adls:/inexistentFile.cdm.json");
+
+            Assert.AreEqual(1, count);
+        }
+
+        /// <summary>
+        /// Tests if the adapter handles requests correctly when the adls hostname contains https
+        /// </summary>
+        [TestMethod]
+        public async Task TestHttpsHostname()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+            string filename = $"HTTPSWriteTest/{Environment.GetEnvironmentVariable("USERNAME")}_{Environment.GetEnvironmentVariable("COMPUTERNAME")}_CSharp.txt";
+            var adlsAdapter = AdlsTestHelper.CreateAdapterWithSharedKey(null, false, true);
+            try
+            {
+                await adlsAdapter.ReadAsync(filename);
+                await adlsAdapter.ComputeLastModifiedTimeAsync(filename);
+            }
+            catch (UriFormatException ex)
+            {
+                Assert.Fail(ex.Message);
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        /// <summary>
+        /// Checks if the endpoint of the adls adapter is set to default if not present in the config parameters.
+        /// This is necessary to support old config files that do not include an "endpoint".
+        /// </summary>
+        [TestMethod]
+        public void TestEndpointMissingOnConfig()
+        {
+            var config = new JObject
+                {
+                    { "hostname", "hostname.dfs.core.windows.net" },
+                    { "root", "root" },
+                    { "tenant", "tenant" },
+                    { "clientId", "clientId" }
+                };
+            var adlsAdapter = new ADLSAdapter();
+            adlsAdapter.UpdateConfig(config.ToString());
+            Assert.AreEqual(AzureCloudEndpoint.AzurePublic, adlsAdapter.Endpoint);
+        }
+
+        /// <summary>
+        /// Test if formattedHostname is properly set when loading from config.
+        /// </summary>
+        [TestMethod]
+        public void TestFormattedHostname()
+        {
+            var config = new JObject
+                {
+                    { "hostname", "hostname.dfs.core.windows.net" },
+                    { "root", "root" },
+                    { "tenant", "tenant" },
+                    { "clientId", "clientId" }
+                };
+            var adlsAdapter = new ADLSAdapter();
+            adlsAdapter.UpdateConfig(config.ToString());
+
+            var corpusPath = adlsAdapter.CreateCorpusPath("https://hostname.dfs.core.windows.net/root/partitions/data.csv");
+            Assert.AreEqual("/partitions/data.csv", corpusPath);
         }
 
         /// <summary>
@@ -232,7 +343,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Storage
 
             var adlsAdapter1WithFolders = new ADLSAdapter(host1, "root-without-slash/folder1/folder2", string.Empty);
             Assert.AreEqual("/root-without-slash/folder1/folder2", adlsAdapter1WithFolders.Root);
-            
+
             var adapterPath2 = "https://storageaccount.dfs.core.windows.net/root-without-slash/folder1/folder2/a/1.csv";
             var corpusPath2 = adlsAdapter1WithFolders.CreateCorpusPath(adapterPath2);
             Assert.AreEqual("/a/1.csv", corpusPath2);
@@ -262,6 +373,79 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Storage
             Assert.AreEqual("/root-starts-with-slash/folder1/folder2", ((ADLSAdapter)corpus.Storage.FetchAdapter("adlsadapter3")).Root);
             Assert.AreEqual("/root-ends-with-slash/folder1/folder2", ((ADLSAdapter)corpus.Storage.FetchAdapter("adlsadapter4")).Root);
             Assert.AreEqual("/root-with-slashes/folder1/folder2", ((ADLSAdapter)corpus.Storage.FetchAdapter("adlsadapter5")).Root);
+        }
+
+        /// <summary>
+        /// Test hostname with leading protocol.
+        /// </summary>
+        [TestMethod]
+        public void TestHostnameWithLeadingProtocol()
+        {
+            var host1 = "https://storageaccount.dfs.core.windows.net";
+            var adlsAdapter1 = new ADLSAdapter(host1, "root-without-slash", string.Empty);
+            var adapterPath = "https://storageaccount.dfs.core.windows.net/root-without-slash/a/1.csv";
+            var corpusPath1 = adlsAdapter1.CreateCorpusPath(adapterPath);
+            Assert.AreEqual("https://storageaccount.dfs.core.windows.net", adlsAdapter1.Hostname);
+            Assert.AreEqual("/a/1.csv", corpusPath1);
+            Assert.AreEqual(adapterPath, adlsAdapter1.CreateAdapterPath(corpusPath1));
+
+            var host2 = "HttPs://storageaccount.dfs.core.windows.net";
+            var adlsAdapter2 = new ADLSAdapter(host2, "root-without-slash", string.Empty);
+            var corpusPath2 = adlsAdapter2.CreateCorpusPath(adapterPath);
+            Assert.AreEqual("HttPs://storageaccount.dfs.core.windows.net", adlsAdapter2.Hostname);
+            Assert.AreEqual("/a/1.csv", corpusPath2);
+            Assert.AreEqual(adapterPath, adlsAdapter2.CreateAdapterPath(corpusPath2));
+
+            try
+            {
+                var host3 = "http://storageaccount.dfs.core.windows.net";
+                var adlsAdapter3 = new ADLSAdapter(host3, "root-without-slash", string.Empty);
+                Assert.Fail("Expected Exception for using a http:// hostname.");
+            }
+            catch (Exception ex)
+            {
+                Assert.IsTrue(ex is ArgumentException);
+            }
+
+            try
+            {
+                var host4 = "https://bar:baz::]/foo/";
+                var adlsAdapter4 = new ADLSAdapter(host4, "root-without-slash", string.Empty);
+                Assert.Fail("Expected Exception for using and invalid hostname.");
+            }
+            catch (Exception ex)
+            {
+                Assert.IsTrue(ex is ArgumentException);
+            }
+        }
+
+        /// <summary>
+        /// Test azure cloud endpoint in config.
+        /// </summary>
+        [TestMethod]
+        public void TestLoadingAndSavingEndpointInConfig()
+        {
+            // Mount from config
+            var config = TestHelper.GetInputFileContent(testSubpath, nameof(TestLoadingAndSavingEndpointInConfig), "config.json");
+            var corpus = new CdmCorpusDefinition();
+            corpus.Storage.MountFromConfig(config);
+            Assert.Null(((ADLSAdapter)corpus.Storage.FetchAdapter("adlsadapter1")).Endpoint);
+            Assert.AreEqual(AzureCloudEndpoint.AzurePublic, ((ADLSAdapter)corpus.Storage.FetchAdapter("adlsadapter2")).Endpoint);
+            Assert.AreEqual(AzureCloudEndpoint.AzureChina, ((ADLSAdapter)corpus.Storage.FetchAdapter("adlsadapter3")).Endpoint);
+            Assert.AreEqual(AzureCloudEndpoint.AzureGermany, ((ADLSAdapter)corpus.Storage.FetchAdapter("adlsadapter4")).Endpoint);
+            Assert.AreEqual(AzureCloudEndpoint.AzureUsGovernment, ((ADLSAdapter)corpus.Storage.FetchAdapter("adlsadapter5")).Endpoint);
+            try
+            {
+                var configSnakeCase = TestHelper.GetInputFileContent(testSubpath, nameof(TestLoadingAndSavingEndpointInConfig), "config-SnakeCase.json");
+                var corpusSnakeCase = new CdmCorpusDefinition();
+                corpusSnakeCase.Storage.MountFromConfig(configSnakeCase);
+                Assert.Fail("Expected RuntimeException for config.json using endpoint value in snake case.");
+            }
+            catch (Exception ex)
+            {
+                String message = "Endpoint value should be a string of an enumeration value from the class AzureCloudEndpoint in Pascal case.";
+                Assert.AreEqual(message, ex.Message);
+            }
         }
 
         /// <summary>
@@ -306,6 +490,250 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Storage
             {
                 Assert.Fail("AdlsAdapter initialized without secret shouldn't throw exception when updating config.");
             }
+        }
+
+        /// <summary>
+        /// Tests writing null content to ADLS. Expected behavior is not to leave any 0 byte file behind.
+        /// </summary>
+        [TestMethod]
+        public async Task ADLSWriteClientIdNullContentsNoEmptyFileLeft()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+            string filename = "nullcheck_CSharp.txt";
+            string writeContents = null;
+
+            ADLSAdapter adapter = AdlsTestHelper.CreateAdapterWithClientId();
+            adapter.Ctx = new ResolveContext(null, null);
+            adapter.Ctx.FeatureFlags.Add("ADLSAdapter_deleteEmptyFile", true);
+
+            try
+            {
+                await adapter.WriteAsync(filename, writeContents);
+            }
+            catch (Exception e)
+            { }
+
+            try
+            {
+                await adapter.ReadAsync(filename);
+            }
+            catch (Exception e)
+            {
+                Assert.IsTrue(e.Message.Contains("The specified path does not exist"));
+            }
+
+        }
+
+        /// <summary>
+        /// Tests writing empty content to ADLS. Expected behavior is not to leave any 0 byte file behind.
+        /// </summary>
+        [TestMethod]
+        public async Task ADLSWriteClientIdEmptyContentsNoEmptyFileLeft()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+            string filename = "emptycheck_CSharp.txt";
+            string writeContents = "";
+
+            ADLSAdapter adapter = AdlsTestHelper.CreateAdapterWithClientId();
+
+            try
+            {
+                await adapter.WriteAsync(filename, writeContents);
+            }
+            catch (Exception e)
+            { }
+
+            try
+            {
+                await adapter.ReadAsync(filename);
+            }
+            catch (Exception e)
+            {
+                Assert.IsTrue(e.Message.Contains("The specified path does not exist"));
+            }
+
+        }
+
+        /// <summary>
+        /// Tests writing large file content to ADLS. Expected behavior is not to leave any 0 byte file behind.
+        /// </summary>
+        [TestMethod]
+        public async Task ADLSWriteClientIdLargeFileContentsNoEmptyFileLeft()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+            string filename = "largefilecheck_CSharp.txt";
+            string writeContents = new string('A', 100000000);
+            ADLSAdapter adapter = AdlsTestHelper.CreateAdapterWithClientId();
+            adapter.Ctx = new ResolveContext(null, null);
+            adapter.Ctx.FeatureFlags.Add("ADLSAdapter_deleteEmptyFile", true);
+
+            try
+            {
+                await adapter.WriteAsync(filename, writeContents);
+            }
+            catch (Exception e)
+            { }
+
+            try
+            {
+                await adapter.ReadAsync(filename);
+            }
+            catch (Exception e)
+            {
+                Assert.IsTrue(e.Message.Contains("The specified path does not exist"));
+            }
+        }
+
+        /// <summary>
+        /// Tests that ADLS upload error on write are handled correctly
+        /// </summary>
+        [TestMethod]
+        public async Task ADLSWriteUploadError()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+
+            // first request creates an empty file
+            var firstResponse = new CdmHttpResponse(HttpStatusCode.Created)
+            {
+                IsSuccessful = true,
+            };
+
+            // second request to throw error
+            var secondResponse = new CdmHttpResponse(HttpStatusCode.NotFound)
+            {
+                IsSuccessful = true,
+            };
+
+            // before error is logged, request is made to delete content at path
+            var thirdResponse = new CdmHttpResponse()
+            {
+                IsSuccessful = true,
+            };
+
+            var mockCdmHttpClient = new Mock<ICdmHttpClient>();
+            var sequence = new MockSequence();
+
+            mockCdmHttpClient.InSequence(sequence).Setup(foo => foo.SendAsync(It.IsAny<CdmHttpRequest>(), It.IsAny<Callback>(), It.IsAny<CdmCorpusContext>()))
+                .ReturnsAsync(firstResponse);
+            mockCdmHttpClient.InSequence(sequence).Setup(foo => foo.SendAsync(It.IsAny<CdmHttpRequest>(), It.IsAny<Callback>(), It.IsAny<CdmCorpusContext>()))
+                .ReturnsAsync(secondResponse);
+            mockCdmHttpClient.InSequence(sequence).Setup(foo => foo.SendAsync(It.IsAny<CdmHttpRequest>(), It.IsAny<Callback>(), It.IsAny<CdmCorpusContext>()))
+                .ReturnsAsync(thirdResponse);
+
+            bool uploadedDataNotAcceptedError = false;
+
+            var corpus = TestHelper.GetLocalCorpus(testSubpath, "ADLSWriteErrors");
+            corpus.SetEventCallback(new EventCallback
+            {
+                Invoke = (status, message) =>
+                {
+                    if (message.Contains("Could not write ADLS content at path, there was an issue at \"/someDoc.cdm.json\" during the append action. Reason: "))
+                    {
+                        uploadedDataNotAcceptedError = true;
+                    }
+                }
+            }, CdmStatusLevel.Error);
+            corpus.Storage.Mount("adls", new MockAdlsAdapter(mockCdmHttpClient.Object));
+
+            var adlsFolder = corpus.Storage.NamespaceFolders["adls"];
+            var someDoc = adlsFolder.Documents.Add("someDoc");
+            await someDoc.SaveAsAsync("someDoc.cdm.json");
+
+            Assert.IsTrue(uploadedDataNotAcceptedError);
+        }
+
+        /// <summary>
+        /// Tests that ADLS flush error on write are handled correctly
+        /// </summary>
+        [TestMethod]
+        public async Task ADLSWriteFlushError()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+
+            var firstResponse = new CdmHttpResponse(HttpStatusCode.Created)
+            {
+                IsSuccessful = true,
+            };
+            var secondResponse = new CdmHttpResponse(HttpStatusCode.Accepted)
+            {
+                IsSuccessful = true,
+            };
+            var thirdResponse = new CdmHttpResponse()
+            {
+                IsSuccessful = true,
+            };
+            var fourthResponse = new CdmHttpResponse(HttpStatusCode.NotModified)
+            {
+                IsSuccessful = true,
+            };
+
+            var mockCdmHttpClient = new Mock<ICdmHttpClient>();
+            var sequence = new MockSequence();
+
+            // first request creates an empty file
+            mockCdmHttpClient.InSequence(sequence).Setup(foo => foo.SendAsync(It.IsAny<CdmHttpRequest>(), It.IsAny<Callback>(), It.IsAny<CdmCorpusContext>()))
+                .ReturnsAsync(firstResponse);
+
+            // second request is accepted, uploaded data worked correctly
+            mockCdmHttpClient.InSequence(sequence).Setup(foo => foo.SendAsync(It.IsAny<CdmHttpRequest>(), It.IsAny<Callback>(), It.IsAny<CdmCorpusContext>()))
+                .ReturnsAsync(secondResponse);
+
+            // before error is logged, request is made to delete content at path
+            mockCdmHttpClient.InSequence(sequence).Setup(foo => foo.SendAsync(It.IsAny<CdmHttpRequest>(), It.IsAny<Callback>(), It.IsAny<CdmCorpusContext>()))
+                .ReturnsAsync(thirdResponse);
+
+            // this failure occurs when data was not flushed correctly
+            mockCdmHttpClient.InSequence(sequence).Setup(foo => foo.SendAsync(It.IsAny<CdmHttpRequest>(), It.IsAny<Callback>(), It.IsAny<CdmCorpusContext>()))
+                .ReturnsAsync(fourthResponse);
+
+            bool notFlushedErrorHit = false;
+
+            var corpus = TestHelper.GetLocalCorpus(testSubpath, "ADLSWriteErrors");
+            corpus.SetEventCallback(new EventCallback
+            {
+                Invoke = (status, message) =>
+                {
+                    if (message.Contains("Could not write ADLS content at path, there was an issue at \"/someDoc.cdm.json\" during the flush action. Reason: "))
+                    {
+                        notFlushedErrorHit = true;
+                    }
+                }
+            }, CdmStatusLevel.Error);
+            corpus.Storage.Mount("adls", new MockAdlsAdapter(mockCdmHttpClient.Object));
+
+            var adlsFolder = corpus.Storage.NamespaceFolders["adls"];
+            var someDoc = adlsFolder.Documents.Add("someDoc");
+            await someDoc.SaveAsAsync("someDoc.cdm.json");
+
+            Assert.IsTrue(notFlushedErrorHit);
+        }
+
+        /// <summary>
+        /// Tests refreshing data partition gets file size in ADLS
+        /// </summary>
+        [TestMethod]
+        public async Task TestADLSRefreshesDataPartition()
+        {
+            AdlsTestHelper.CheckADLSEnvironment();
+            
+            var adlsAdapter = AdlsTestHelper.CreateAdapterWithSharedKey();
+
+            var corpus = new CdmCorpusDefinition();
+            corpus.Storage.Mount("adls", adlsAdapter);
+            var cdmManifest = await corpus.FetchObjectAsync<CdmManifestDefinition>("adls:/TestPartitionMetadata/partitions.manifest.cdm.json");
+            var fileStatusCheckOptions = new FileStatusCheckOptions { IncludeDataPartitionSize = true };
+
+            var partitionEntity = cdmManifest.Entities.AllItems[0];
+            Assert.AreEqual(partitionEntity.DataPartitions.Count, 1);
+            var partition = partitionEntity.DataPartitions[0];
+
+            await cdmManifest.FileStatusCheckAsync(fileStatusCheckOptions: fileStatusCheckOptions);
+            
+            var localTraitIndex = partition.ExhibitsTraits.IndexOf("is.partition.size");
+            Assert.AreNotEqual(localTraitIndex, -1);
+            var localTrait = partition.ExhibitsTraits[localTraitIndex] as CdmTraitReference;
+            Assert.AreEqual(localTrait.NamedReference, "is.partition.size");
+            Assert.AreEqual(localTrait.Arguments[0].Value, 2);
         }
     }
 }

@@ -1,17 +1,17 @@
 ﻿# Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from cdm.enums import CdmObjectType
 from cdm.objectmodel import CdmObjectReference
 from cdm.persistence import PersistenceLayer
 from cdm.utilities import ResolveOptions, CopyOptions, copy_data_utils
+from cdm.utilities.string_utils import StringUtils
 
 from . import utils
-from .projections.projection_persistence import ProjectionPersistence
 from .types import AttributeGroupReference, CdmJsonType, \
-    DataTypeReference, EntityReference, PurposeReference, TraitReference
+    DataTypeReference, EntityReference, PurposeReference, TraitReference, TraitGroupReference
 
 
 class CdmObjectRefPersistence:
@@ -21,7 +21,7 @@ class CdmObjectRefPersistence:
         copy = None
         replace = None
 
-        if instance.named_reference:
+        if not StringUtils.is_blank_by_cdm_standard(instance.named_reference):
             identifier = utils.copy_identifier_ref(instance, res_opt, options)
             if instance.simple_named_reference:
                 return identifier
@@ -38,6 +38,9 @@ class CdmObjectRefPersistence:
             if replace:
                 copy = replace
 
+        if instance.optional is not None:
+            copy.optional = instance.optional
+
         if instance.applied_traits:
             # We don't know if the object we are copying has applied traits or not and hence use any
             copy.appliedTraits = copy_data_utils._array_copy_data(res_opt, instance.applied_traits, options)
@@ -48,6 +51,7 @@ class CdmObjectRefPersistence:
     @staticmethod
     def _copy_ref_data(instance: CdmObjectReference, res_opt: ResolveOptions,
                        copy: CdmJsonType, ref_to: CdmJsonType, options: CopyOptions) -> Optional[CdmJsonType]:
+        from cdm.persistence.cdmfolder.trait_reference_persistence import TraitReferencePersistence
 
         if instance.object_type == CdmObjectType.ATTRIBUTE_GROUP_REF:
             copy = AttributeGroupReference()
@@ -69,6 +73,11 @@ class CdmObjectRefPersistence:
             copy = TraitReference()
             copy.traitReference = ref_to
             copy.arguments = copy_data_utils._array_copy_data(res_opt, instance.arguments, options)
+            copy.verb = TraitReferencePersistence.to_data(instance.verb, res_opt, options) if instance.verb else None
+            return copy
+        elif instance.object_type == CdmObjectType.TRAIT_GROUP_REF:
+            copy = TraitGroupReference()
+            copy.traitGroupReference = ref_to
             return copy
         else:
             return None

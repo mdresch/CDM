@@ -9,16 +9,20 @@ import {
     cdmObjectType,
     CdmTraitDefinition,
     CdmTraitReference,
+    cdmLogCode,
     copyOptions,
     Logger,
     resolveOptions,
-    traitToPropertyMap
+    traitToPropertyMap,
+    StringUtils
 } from '../../internal';
 import * as timeUtils from '../../Utilities/timeUtils';
 import { processExtensionFromJson } from './ExtensionHelper';
 import { CsvFormatSettings, Partition, partitionBaseProperties } from './types';
 
 export class DataPartitionPersistence {
+    private static TAG: string = DataPartitionPersistence.name;
+
     public static async fromData(
         ctx: CdmCorpusContext,
         object: Partition,
@@ -26,55 +30,49 @@ export class DataPartitionPersistence {
         localExtensionTraitDefList: CdmTraitDefinition[],
         documentFolder: CdmFolderDefinition):
         Promise<CdmDataPartitionDefinition> {
-        const newPartition: CdmDataPartitionDefinition = ctx.corpus.MakeObject(cdmObjectType.dataPartitionDef, object.name);
+        const dataPartition: CdmDataPartitionDefinition = ctx.corpus.MakeObject(cdmObjectType.dataPartitionDef, object.name);
 
-        if (object.description && object.description.trim() !== '') {
-            newPartition.description = object.description;
+        if (!StringUtils.isBlankByCdmStandard(object.description)) {
+            dataPartition.description = object.description;
         }
 
-        newPartition.location = ctx.corpus.storage.createRelativeCorpusPath(
+        dataPartition.location = ctx.corpus.storage.createRelativeCorpusPath(
             ctx.corpus.storage.adapterPathToCorpusPath(object.location),
             documentFolder);
 
-        newPartition.refreshTime = object.refreshTime;
+        dataPartition.refreshTime = object.refreshTime;
 
         if (object['cdm:lastFileModifiedTime'] !== undefined) {
-            newPartition.lastFileModifiedTime = new Date(object['cdm:lastFileModifiedTime']);
+            dataPartition.lastFileModifiedTime = new Date(object['cdm:lastFileModifiedTime']);
         }
 
         if (object['cdm:lastFileStatusCheckTime'] !== undefined) {
-            newPartition.lastFileStatusCheckTime = new Date(object['cdm:lastFileStatusCheckTime']);
+            dataPartition.lastFileStatusCheckTime = new Date(object['cdm:lastFileStatusCheckTime']);
         }
 
-        if (!newPartition.location) {
-            Logger.warning(
-                DataPartitionPersistence.name,
-                ctx,
-                `Couldn't find data partition's location for partition ${newPartition.name}.`,
-                this.fromData.name
-            );
+        if (StringUtils.isBlankByCdmStandard(dataPartition.location)) {
+            Logger.warning(ctx, this.TAG, this.fromData.name, null, cdmLogCode.WarnPersistPartitionLocMissing, dataPartition.name);
         }
 
         if (object.isHidden === true) {
             const isHiddenTrait: CdmTraitReference = ctx.corpus.MakeRef(cdmObjectType.traitRef, 'is.hidden', true);
-            newPartition.exhibitsTraits.push(isHiddenTrait);
+            dataPartition.exhibitsTraits.push(isHiddenTrait);
         }
 
-        await ModelJson.utils.processAnnotationsFromData(ctx, object, newPartition.exhibitsTraits);
+        await ModelJson.utils.processAnnotationsFromData(ctx, object, dataPartition.exhibitsTraits);
 
+        let csvFormatTrait: CdmTraitReference = dataPartition.exhibitsTraits.item('is.partition.format.CSV') as CdmTraitReference;
         if (object.fileFormatSettings !== undefined && object.fileFormatSettings.$type === 'CsvFormatSettings') {
-            const csvFormatTrait: CdmTraitReference = ModelJson.utils.createCsvTrait(object.fileFormatSettings, ctx);
+            const partitionTraitExisted = !!csvFormatTrait;
+            csvFormatTrait = ModelJson.utils.createCsvTrait(object.fileFormatSettings, ctx, csvFormatTrait);
 
-            if (csvFormatTrait !== undefined) {
-                newPartition.exhibitsTraits.push(csvFormatTrait);
-            } else {
-                Logger.error(
-                    DataPartitionPersistence.name,
-                    ctx,
-                    'There was a problem while processing csv format settings inside data partition.'
-                );
-
+            if (csvFormatTrait === undefined) {
+                Logger.error(ctx, this.TAG, this.fromData.name, null, cdmLogCode.ErrPersistCsvProcessingError);
                 return undefined;
+            }
+
+            if (!partitionTraitExisted) {
+                dataPartition.exhibitsTraits.push(csvFormatTrait);
             }
         }
 
@@ -82,12 +80,12 @@ export class DataPartitionPersistence {
             ctx,
             object,
             partitionBaseProperties,
-            newPartition.exhibitsTraits,
+            dataPartition.exhibitsTraits,
             extensionTraitDefList,
             localExtensionTraitDefList
         );
 
-        return newPartition;
+        return dataPartition;
     }
 
     public static async toData(instance: CdmDataPartitionDefinition, resOpt: resolveOptions, options: copyOptions): Promise<Partition> {
@@ -108,11 +106,16 @@ export class DataPartitionPersistence {
             'cdm:lastFileStatusCheckTime': timeUtils.getFormattedDateString(instance.lastFileStatusCheckTime)
         };
 
-        if (!result.location) {
-            Logger.warning(DataPartitionPersistence.name, instance.ctx, `Couldn't find data partition's location for partition ${result.name}.`, this.toData.name);
+        if (result.name === undefined) {
+            Logger.warning(instance.ctx, this.TAG, this.toData.name, instance.atCorpusPath, cdmLogCode.WarnPersistPartitionNameNull);
+            result.name = '';
         }
 
-        ModelJson.utils.processTraitsAndAnnotationsToData(instance.ctx, result, instance.exhibitsTraits);
+        if (StringUtils.isBlankByCdmStandard(result.location)) {
+            Logger.warning(instance.ctx, this.TAG, this.toData.name, instance.atCorpusPath, cdmLogCode.WarnPersistPartitionLocMissing, result.name);
+        }
+
+        await ModelJson.utils.processTraitsAndAnnotationsToData(instance.ctx, result, instance.exhibitsTraits);
 
         if (isHiddenTrait) {
             result.isHidden = true;
@@ -127,12 +130,7 @@ export class DataPartitionPersistence {
                 result.fileFormatSettings = csvFormatSettings;
                 result.fileFormatSettings.$type = 'CsvFormatSettings';
             } else {
-                Logger.error(
-                    DataPartitionPersistence.name,
-                    instance.ctx,
-                    'There was a problem while processing csv format trait inside data partition.'
-                );
-
+                Logger.error(instance.ctx, this.TAG, this.toData.name, instance.atCorpusPath, cdmLogCode.ErrPersistCsvProcessingError);
                 return undefined;
             }
         }

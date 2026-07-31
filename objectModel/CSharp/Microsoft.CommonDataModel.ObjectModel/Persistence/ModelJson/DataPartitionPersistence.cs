@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
@@ -16,11 +16,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
     /// </summary>
     class DataPartitionPersistence
     {
+        private static readonly string Tag = nameof(DataPartitionPersistence);
+
         public static async Task<CdmDataPartitionDefinition> FromData(CdmCorpusContext ctx, Partition obj, List<CdmTraitDefinition> extensionTraitDefList, List<CdmTraitDefinition> localExtensionTraitDefList, CdmFolderDefinition documentFolder)
         {
             var partition = ctx.Corpus.MakeObject<CdmDataPartitionDefinition>(CdmObjectType.DataPartitionDef, obj.Name);
 
-            if (!string.IsNullOrWhiteSpace(obj.Description))
+            if (!StringUtils.IsBlankByCdmStandard(obj.Description))
                 partition.Description = obj.Description;
             partition.Location = ctx.Corpus.Storage.CreateRelativeCorpusPath(
                 ctx.Corpus.Storage.AdapterPathToCorpusPath(obj.Location),
@@ -30,9 +32,9 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
             partition.LastFileStatusCheckTime = obj.LastFileStatusCheckTime;
 
 
-            if (string.IsNullOrEmpty(partition.Location))
+            if (StringUtils.IsBlankByCdmStandard(partition.Location))
             {
-                Logger.Warning(nameof(DataPartitionPersistence), ctx as ResolveContext, $"Couldn't find data partition's location for partition {partition.Name}.", nameof(FromData));
+                Logger.Warning(ctx as ResolveContext, Tag, nameof(FromData), null, CdmLogCode.WarnPersistPartitionLocMissing, partition.Name);
             }
 
             if (obj.IsHidden == true)
@@ -43,17 +45,21 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
 
             await Utils.ProcessAnnotationsFromData(ctx, obj, partition.ExhibitsTraits);
 
+            var csvFormatTrait = partition.ExhibitsTraits.Item("is.partition.format.CSV") as CdmTraitReference;
             if (obj.FileFormatSettings != null)
             {
-                var csvFormatTrait = Utils.CreateCsvTrait(obj.FileFormatSettings, ctx);
+                var partitionTraitExisted = csvFormatTrait != null;
+                csvFormatTrait = Utils.CreateCsvTrait(obj.FileFormatSettings, ctx, csvFormatTrait);
 
                 if (csvFormatTrait == null) {
-                    Logger.Error(nameof(DataPartitionPersistence), ctx as ResolveContext, "There was a problem while processing csv format settings inside data partition.");
-
+                    Logger.Error(ctx, Tag, nameof(FromData), null, CdmLogCode.ErrPersistCsvProcessingError);
                     return null;
                 }
 
-                partition.ExhibitsTraits.Add(csvFormatTrait);
+                if (!partitionTraitExisted)
+                {
+                    partition.ExhibitsTraits.Add(csvFormatTrait);
+                }
             }
             ExtensionHelper.ProcessExtensionFromJson(ctx, obj, partition.ExhibitsTraits, extensionTraitDefList, localExtensionTraitDefList);
 
@@ -75,12 +81,18 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
                 LastFileStatusCheckTime = instance.LastFileStatusCheckTime
             };
 
-            if (string.IsNullOrEmpty(result.Location))
+            if (result.Name == null)
             {
-                Logger.Warning(nameof(DataPartitionPersistence), instance.Ctx, $"Couldn't find data partition's location for partition {result.Name}.", nameof(ToData));
+                Logger.Warning(instance.Ctx, Tag, nameof(ToData), instance.AtCorpusPath, CdmLogCode.WarnPersistPartitionNameNull);
+                result.Name = "";
             }
 
-            Utils.ProcessTraitsAndAnnotationsToData(instance.Ctx, result, instance.ExhibitsTraits);
+            if (StringUtils.IsBlankByCdmStandard(result.Location))
+            {
+                Logger.Warning(instance.Ctx, Tag, nameof(ToData), instance.AtCorpusPath, CdmLogCode.WarnPersistPartitionLocMissing, result.Name);
+            }
+
+            await Utils.ProcessTraitsAndAnnotationsToData(instance.Ctx, result, instance.ExhibitsTraits);
 
             var t2pm = new TraitToPropertyMap(instance);
 
@@ -102,9 +114,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
                 }
                 else
                 {
-                    Logger.Error(nameof(DataPartitionPersistence), instance.Ctx,
-                        "There was a problem while processing csv format trait inside data partition.");
-
+                    Logger.Error(instance.Ctx, Tag, nameof(ToData), instance.AtCorpusPath, CdmLogCode.ErrPersistCsvProcessingError);
                     return null;
                 }
             }

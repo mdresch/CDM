@@ -1,13 +1,13 @@
-﻿//Microsoft Corporation.All rights reserved.
+﻿// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
-
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Threading.Tasks;
 
 namespace Microsoft.CommonDataModel.ObjectModel.Storage
 {
+    using Microsoft.CommonDataModel.ObjectModel.Cdm;
+    using Microsoft.CommonDataModel.ObjectModel.Utilities;
+    using System;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
 
     /// <summary>
     /// The CDM base class for an adapter object that can read and write documents from a data source.
@@ -15,8 +15,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
     /// to manually copy data to the location where the Object Model is running. By deriving from this 
     /// this class, users can to create their own adapter if needed.
     /// </summary>
-    public abstract class StorageAdapterBase : StorageAdapter
+    public abstract class StorageAdapterBase
     {
+        /// <summary>
+        /// The CDM corpus context, gives information for the logger.
+        /// </summary>
+        public CdmCorpusContext Ctx { get; set; }
+
         /// <summary>
         /// The location hint, gives a hint to the reader app about the location where the adapter implementation (Nuget, NPM...) can be obtained.
         /// </summary>
@@ -79,11 +84,40 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
         }
 
         /// <summary>
+        /// Returns the file metadata info about the specified document.
+        /// </summary>
+        public virtual Task<CdmFileMetadata> FetchFileMetadataAsync(string corpusPath)
+        {
+            return Task.FromResult<CdmFileMetadata>(null);
+        }
+
+        /// <summary>
         /// Returns a list of corpus paths to all files and folders at or under the provided corpus path to a folder.
         /// </summary>
+        [Obsolete("FetchAllFilesAsync is deprecated. Please use FetchAllFilesMetadataAsync instead.")]
         public virtual Task<List<string>> FetchAllFilesAsync(string folderCorpusPath)
         {
-            return null;
+            return Task.FromResult<List<string>>(null);
+        }
+
+        /// <summary>
+        /// Returns a list of dictionaries containing metadata about data partitions
+        /// </summary>
+        public virtual async Task<IDictionary<string, CdmFileMetadata>> FetchAllFilesMetadataAsync(string folderCorpusPath)
+        {
+            List<string> allFiles = await this.FetchAllFilesAsync(folderCorpusPath);
+
+            Dictionary<string, CdmFileMetadata> filesMetadata = new Dictionary<string, CdmFileMetadata>();
+
+            if (allFiles != null)
+            {
+                foreach (var file in allFiles)
+                {
+                    filesMetadata.Add(file, null);
+                }
+            }
+
+            return filesMetadata;
         }
 
         /// <summary>

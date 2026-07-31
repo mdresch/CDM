@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-import * as cdm from "../../../objectModel/TypeScript";
+import * as cdm from 'cdm.objectmodel';
 
 /**
  * --------------------------------------------------------------------------------------------------------------------
@@ -22,6 +22,10 @@ async function runSample() {
     // Instantiate corpus and set up the default namespace to be ADLS
 
     const cdmCorpus: cdm.types.CdmCorpusDefinition = new cdm.types.CdmCorpusDefinition();
+
+    // set callback to receive error and warning logs.
+    cdmCorpus.setEventCallback( (level, message) => { console.log(message) }, cdm.types.cdmStatusLevel.warning);
+
     cdmCorpus.storage.defaultNamespace = 'local';
 
     // ------------------------------------------------------------------------------------------------------------

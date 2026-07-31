@@ -4,9 +4,9 @@
 from datetime import datetime, timezone
 import json
 import os
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from cdm.utilities import StorageUtils
+from cdm.utilities import CdmFileMetadata, StorageUtils
 from .base import StorageAdapterBase
 
 
@@ -15,7 +15,7 @@ class LocalAdapter(StorageAdapterBase):
 
     def __init__(self, root: Optional[str] = '') -> None:
         super().__init__()
-        self.root = root  # type: str        
+        self.root = root  # type: str
 
         # --- internal ---
         self._full_root = os.path.abspath(self.root)
@@ -63,16 +63,38 @@ class LocalAdapter(StorageAdapterBase):
         return None
 
     async def compute_last_modified_time_async(self, corpus_path: str) -> Optional[datetime]:
+        file_metadata = await self.fetch_file_metadata_async(corpus_path)
+
+        if file_metadata is None:
+            return None
+
+        return file_metadata['last_modified_time']
+
+    async def fetch_file_metadata_async(self, corpus_path: str) -> Optional[CdmFileMetadata]:
         adapter_path = self.create_adapter_path(corpus_path)
         if os.path.exists(adapter_path):
+            file_size = os.path.getsize(adapter_path)
             modified_time = datetime.fromtimestamp(os.path.getmtime(adapter_path))
-            return modified_time.replace(tzinfo=timezone.utc)
+            return { 'last_modified_time': modified_time.replace(tzinfo=timezone.utc), 'file_size_bytes': file_size }
         return None
 
     async def fetch_all_files_async(self, folder_corpus_path: str) -> List[str]:
+        def _walk_error(os_error):
+            raise Exception('os error on {}'.format(type(os_error)))
         adapter_folder = self.create_adapter_path(folder_corpus_path)
-        adapter_files = [os.path.join(dp, fn) for dp, dn, fns in os.walk(adapter_folder) for fn in fns]
+        adapter_files = [os.path.join(dp, fn) for dp, dn, fns in os.walk(adapter_folder, onerror=_walk_error) for fn in fns]
         return [self.create_corpus_path(file) for file in adapter_files]
+
+    async def fetch_all_files_metadata_async(self, folder_corpus_path: str) -> Dict[str, CdmFileMetadata]:
+        file_metadatas = {}
+        file_names = await self.fetch_all_files_async(folder_corpus_path)
+
+        for file_name in file_names:
+            path = self.create_adapter_path(file_name)
+            if os.path.exists(path):
+                file_metadatas[file_name] = {'file_size_bytes': os.path.getsize(path) if os.path.isfile else None, 'last_modified_time': datetime.fromtimestamp(os.path.getmtime(path))}
+
+        return file_metadatas
 
     def fetch_config(self) -> str:
         result_config = {'type': self._type}

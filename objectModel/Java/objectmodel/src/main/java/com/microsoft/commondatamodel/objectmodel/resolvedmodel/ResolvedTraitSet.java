@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmArgumentDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmParameterDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmTraitDefinition;
+import com.microsoft.commondatamodel.objectmodel.cdm.CdmTraitReference;
+import com.microsoft.commondatamodel.objectmodel.cdm.CdmTraitReferenceBase;
 import com.microsoft.commondatamodel.objectmodel.cdm.StringSpewCatcher;
 import com.microsoft.commondatamodel.objectmodel.utilities.ResolveOptions;
 import java.io.IOException;
@@ -33,7 +35,7 @@ public class ResolvedTraitSet {
   private Map<CdmTraitDefinition, ResolvedTrait> lookupByTrait;
 
   public ResolvedTraitSet(final ResolveOptions resOpt) {
-    this.resOpt = resOpt.copy();
+    this.resOpt = resOpt;
     this.set = new ArrayList<>();
     this.lookupByTrait = new LinkedHashMap<>();
     this.hasElevated = false;
@@ -57,9 +59,11 @@ public class ResolvedTraitSet {
     if (traitSetResult.getLookupByTrait().containsKey(trait)) {
       ResolvedTrait rtOld = traitSetResult.getLookupByTrait().get(trait);
       List<Object> avOld = null;
+      List<Boolean> wasSetOld = null;
 
       if (rtOld.getParameterValues() != null) {
         avOld = rtOld.getParameterValues().getValues();
+        wasSetOld = rtOld.getParameterValues().getWasSet();
       }
 
       if (av != null && avOld != null) {
@@ -75,16 +79,35 @@ public class ResolvedTraitSet {
                 traitSetResult = traitSetResult.shallowCopyWithException(trait);
                 rtOld = traitSetResult.getLookupByTrait().get(trait);
                 avOld = rtOld.getParameterValues().getValues();
+                wasSetOld = rtOld.getParameterValues().getWasSet();
                 copyOnWrite = false;
               }
 
               avOld.set(i, ParameterValue
                   .fetchReplacementValue(resOpt, avOld.get(i), av.get(i), wasSet.get(i)));
+              wasSetOld.set(i, (wasSetOld.get(i) || wasSet.get(i)));
             }
           } catch (final Exception ex) {
             // Do something?
           }
         }
+      }
+      // is an explicit verb given with this reference?
+      if (toMerge.getExplicitVerb() != null) {
+          if (copyOnWrite) {
+              traitSetResult = traitSetResult.shallowCopyWithException(trait);
+              rtOld = traitSetResult.lookupByTrait.get(trait);
+              copyOnWrite = false;
+          }
+          rtOld.setExplicitVerb(toMerge.getExplicitVerb());
+      }
+      // are meta traits set on this newer reference?
+      if (toMerge.getMetaTraits() != null && toMerge.getMetaTraits().size() > 0) {
+          if (copyOnWrite) {
+              traitSetResult = traitSetResult.shallowCopyWithException(trait);
+              rtOld = traitSetResult.lookupByTrait.get(trait);
+          }
+          rtOld.setMetaTraits(new ArrayList<CdmTraitReferenceBase>(toMerge.getMetaTraits()));
       }
     } else {
       if (copyOnWrite) {
@@ -99,7 +122,7 @@ public class ResolvedTraitSet {
     return traitSetResult;
   }
 
-  ResolvedTraitSet mergeSet(final ResolvedTraitSet toMerge) {
+  public ResolvedTraitSet mergeSet(final ResolvedTraitSet toMerge) {
     return mergeSet(toMerge, false);
   }
 
@@ -143,6 +166,22 @@ public class ResolvedTraitSet {
     }
 
     return null;
+  }
+
+  /**
+   * @deprecated This function is extremely likely to be removed in the public interface, and not
+   * meant to be called externally at all. Please refrain from using it.
+   */
+  @Deprecated
+  public boolean remove(ResolveOptions resOpt, String traitName) {
+    ResolvedTrait rt = this.find(resOpt, traitName);
+    if (rt != null) {
+      this.lookupByTrait.remove(rt.getTrait());
+      this.set.remove(rt);
+      return true;
+    }
+
+    return false;
   }
 
   public ResolvedTraitSet deepCopy() {
@@ -207,6 +246,15 @@ public class ResolvedTraitSet {
     return collection;
   }
 
+  public void setExplicitVerb(CdmTraitDefinition trait, CdmTraitReference verb) {
+      ResolvedTrait resTrait = this.get(trait);
+      resTrait.setExplicitVerb(verb);
+  }
+  public void setMetaTraits(CdmTraitDefinition trait, List<CdmTraitReferenceBase> metaTraits) {
+      ResolvedTrait resTrait = this.get(trait);
+      resTrait.setMetaTraits(new ArrayList<CdmTraitReferenceBase>(metaTraits));
+  }
+
   public void setParameterValueFromArgument(final CdmTraitDefinition trait, final CdmArgumentDefinition arg) {
     final ResolvedTrait resTrait = get(trait);
 
@@ -216,9 +264,7 @@ public class ResolvedTraitSet {
       // get the value index from the parameter collection given the parameter that this argument is setting
       CdmParameterDefinition paramDef = arg.getParameterDef();
       if (paramDef != null) {
-        int iParam = resTrait.getParameterValues().indexOf(paramDef);
-        av.set(iParam, ParameterValue.fetchReplacementValue(resOpt, av.get(iParam), newVal, true));
-        resTrait.getParameterValues().getWasSet().set(iParam, true);
+        resTrait.getParameterValues().setParameterValue(this.getResOpt(), paramDef.getName(), newVal);
       } else {
         // debug
         paramDef = arg.getParameterDef();

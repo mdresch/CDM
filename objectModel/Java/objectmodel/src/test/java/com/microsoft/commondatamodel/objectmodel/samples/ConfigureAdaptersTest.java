@@ -38,7 +38,7 @@ public class ConfigureAdaptersTest extends SampleTestBase {
         FileInputStream fileInputStream = new FileInputStream(new File(testInputPath));
         PrintStream printStream = new PrintStream(new File(testActualOutputPath));
 
-        SCANNER = new Scanner(fileInputStream);
+        SCANNER = new Scanner(fileInputStream, "UTF-8");
         System.setOut(printStream);
 
         configureAdapters();
@@ -49,21 +49,21 @@ public class ConfigureAdaptersTest extends SampleTestBase {
         System.setOut(System.out);
 
         TestHelper.assertFileContentEquality(
-                FileReadWriteUtil.readFileToString(new File(TestHelper.getExpectedOutputFolderPath(TESTS_SUBPATH, TEST_NAME), "output.txt").toString()),
-                FileReadWriteUtil.readFileToString(testActualOutputPath));
+                FileReadWriteUtil.readFileToString(new File(TestHelper.getExpectedOutputFolderPath(TESTS_SUBPATH, TEST_NAME), "output.txt").toString()).replace("\uFEFF", ""),
+                FileReadWriteUtil.readFileToString(testActualOutputPath).replace("\uFEFF", ""));
     }
 
     private void configureAdapters() {
         while (true) {
             System.out.println("List of storage adapters:");
             System.out.println("  1: LocalAdapter");
-            System.out.println("  2: CdmStandardsAdapter");
-            System.out.println("  3: RemoteAdapter");
-            System.out.println("  4: ADLSAdapter");
+            System.out.println("  2: RemoteAdapter");
+            System.out.println("  3: ADLSAdapter");
             System.out.println("Pick a number to configure that storage adapter or press [enter] to exit.");
 
             // Get the user's input.
-            final String input = SCANNER.nextLine();
+            final String input = SCANNER.nextLine().trim().replace("\uFEFF", "");
+
             if (StringUtils.isNullOrEmpty(input)) {
                 break;
             }
@@ -76,16 +76,12 @@ public class ConfigureAdaptersTest extends SampleTestBase {
                     case 1:
                         configureLocalAdapter();
                         break;
-                    // CDM Standards adapter.
-                    case 2:
-                        configureCdmStandardsAdapter();
-                        break;
                     // Remote adapter
-                    case 3:
+                    case 2:
                         configureRemoteAdapter();
                         break;
                     // ADLS adapter.
-                    case 4:
+                    case 3:
                         configureADLSAdapter();
                         break;
                     default:
@@ -102,9 +98,9 @@ public class ConfigureAdaptersTest extends SampleTestBase {
 
     static void configureLocalAdapter() {
         final String root = getParameterValueFromUser(
-                ConfigureParameters.RootPath,
+                "root path",
                 "LocalAdapter",
-                "../example-public-standards"
+                "../../../../../../example-public-standards"
                 /* this is just to show what the value should look like. */);
 
         // Create a local adapter with the parameter values given by the user.
@@ -116,54 +112,6 @@ public class ConfigureAdaptersTest extends SampleTestBase {
         // List the newly configured adapter's properties.
         System.out.println("\nLocalAdapter configured. Properties of this LocalAdapter are:");
         System.out.println("  Root: " + adapter.getRoot());
-        System.out.println();
-    }
-
-    static void configureCdmStandardsAdapter() {
-        // Default values for the optional parameters used by the CDM Standards adapter.
-        String timeout = "2000";
-        String maximumTimeout = "10000";
-        String numberOfRetries = "2";
-
-        // Ask the user if optional parameters should be configured, or if defaults should just be used.
-        if (configureOptionalParameters("CdmStandardsAdapter")) {
-            // Configure optional parameters.
-            timeout = getOptionalParameterValueFromUser(
-                    ConfigureParameters.Timeout,
-                    "CdmStandardsAdapter",
-                    timeout
-                    /* this is just to show what the value should look like. */);
-            maximumTimeout = getOptionalParameterValueFromUser(
-                    ConfigureParameters.MaximumTimeout,
-                    "CdmStandardsAdapter",
-                    maximumTimeout);
-            numberOfRetries = getOptionalParameterValueFromUser(
-                    ConfigureParameters.NumberOfRetries,
-                    "CdmStandardsAdapter",
-                    numberOfRetries);
-        }
-
-        // Create a CDM Standards adapter with the parameter values given by the user.
-        final CdmStandardsAdapter adapter = new CdmStandardsAdapter();
-        adapter.setTimeout(Duration.ofMillis(Integer.parseInt(timeout)));
-        adapter.setMaximumTimeout(Duration.ofMillis(Integer.parseInt(maximumTimeout)));
-        adapter.setNumberOfRetries(Integer.parseInt(numberOfRetries));
-        // waitTimeCallback is another optional parameter and can also be configured here.
-
-        // List the newly configured adapter's properties.
-        System.out.println("\nCdmStandardsAdapter configured. Properties of this CdmStandardsAdapter are:");
-        System.out.println("  "
-                + ConfigureParameters.Timeout
-                + ": "
-                + adapter.getTimeout());
-        System.out.println("  "
-                + ConfigureParameters.MaximumTimeout
-                + ": "
-                + adapter.getMaximumTimeout().toMillis());
-        System.out.println("  "
-                + ConfigureParameters.NumberOfRetries
-                + ": "
-                + adapter.getNumberOfRetries());
         System.out.println();
     }
 
@@ -202,16 +150,16 @@ public class ConfigureAdaptersTest extends SampleTestBase {
         if (configureOptionalParameters("RemoteAdapter")) {
             // Configure optional parameters.
             timeout = getOptionalParameterValueFromUser(
-                    ConfigureParameters.Timeout,
+                    "timeout",
                     "RemoteAdapter",
                     timeout
                     /* this is just to show what the value should look like. */);
             maximumTimeout = getOptionalParameterValueFromUser(
-                    ConfigureParameters.MaximumTimeout,
+                    "maximum timeout",
                     "RemoteAdapter",
                     maximumTimeout);
             numberOfRetries = getOptionalParameterValueFromUser(
-                    ConfigureParameters.NumberOfRetries,
+                    "number of retries",
                     "RemoteAdapter",
                     numberOfRetries);
         }
@@ -228,13 +176,13 @@ public class ConfigureAdaptersTest extends SampleTestBase {
         System.out.println("\nRemoteAdapter configured. Properties of this RemoteAdapter are:");
         // Print the key-value pair for the hosts.
         System.out.println("  Hosts: ");
-        adapter.getHosts().entrySet().forEach(pair ->
-                System.out.println("{'" + pair.getKey() + "' : '" + pair.getValue() + "'}")
+        adapter.getHosts().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(pair ->
+                System.out.println("    { \"" + pair.getKey() + "\": \"" + pair.getValue() + "\" }")
         );
 
-        System.out.println("  Timeout: " + adapter.getTimeout().toMillis());
-        System.out.println("  MaximumTimeout: " + adapter.getMaximumTimeout().toMillis());
-        System.out.println("  NumberOfRetries: " + adapter.getNumberOfRetries());
+        System.out.println("  " + ConfigureParameters.Timeout + ": " + adapter.getTimeout().toMillis());
+        System.out.println("  " + ConfigureParameters.MaximumTimeout + ": " + adapter.getMaximumTimeout().toMillis());
+        System.out.println("  " + ConfigureParameters.NumberOfRetries + ": " + adapter.getNumberOfRetries());
         System.out.println();
     }
 
@@ -264,18 +212,18 @@ public class ConfigureAdaptersTest extends SampleTestBase {
         if (choice == 1) {
             final String hostname =
                     getParameterValueFromUser(
-                            ConfigureParameters.HostName,
+                            "hostname",
                             "ADLSAdapter",
                             "test.dfs.core.windows.net" /* this is just to show what the value should look like. */);
             final String root =
                     getParameterValueFromUser(
-                            ConfigureParameters.Root,
+                            "root",
                             "ADLSAdapter",
-                            "../example-public-standards");
+                            "../../../../../../example-public-standards");
             // DEV-NOTE: This is just a mock shared key used to demonstrate what a shared key should look like. It is not a real shared key.
             final String sharedKey =
                     getParameterValueFromUser(
-                            ConfigureParameters.SharedKey,
+                            "shared key",
                             "ADLSAdapter",
                             "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
 
@@ -286,14 +234,14 @@ public class ConfigureAdaptersTest extends SampleTestBase {
 
             if (configureOptionalParameters("ADLSAdapter")) {
                 timeout = getOptionalParameterValueFromUser(
-                        ConfigureParameters.Timeout,
+                        "timeout",
                         "ADLSAdapter",
                         timeout /* this is just to show what the value should look like. */);
                 maximumTimeout = getOptionalParameterValueFromUser(
-                        ConfigureParameters.MaximumTimeout,
+                        "maximum timeout",
                         "ADLSAdapter", maximumTimeout);
                 numberOfRetries = getOptionalParameterValueFromUser(
-                        ConfigureParameters.NumberOfRetries,
+                        "number of retries",
                         "ADLSAdapter",
                         numberOfRetries);
             }
@@ -307,37 +255,37 @@ public class ConfigureAdaptersTest extends SampleTestBase {
 
             // List the newly configured adapter's properties.
             System.out.println("\nADLSAdapter configured. Properties of this ADLSAdapter are:");
-            System.out.println("  " + ConfigureParameters.HostName + ": " + adapter.getHostname());
+            System.out.println("  " + ConfigureParameters.Hostname + ": " + adapter.getHostname());
             System.out.println("  " + ConfigureParameters.Root + ": " + adapter.getRoot());
             System.out.println("  " + ConfigureParameters.SharedKey + ": " + adapter.getSharedKey());
-            System.out.println("  " + ConfigureParameters.Timeout + ": " + adapter.getTimeout());
+            System.out.println("  " + ConfigureParameters.Timeout + ": " + adapter.getTimeout().toMillis());
             System.out.println("  " + ConfigureParameters.MaximumTimeout + ": " + adapter.getMaximumTimeout().toMillis());
             System.out.println("  " + ConfigureParameters.NumberOfRetries + ": " + adapter.getNumberOfRetries());
             System.out.println();
             // Token (clientId/secret) authentication selected.
         } else {
             final String hostname = getParameterValueFromUser(
-                    ConfigureParameters.SharedKey,
+                    "hostname",
                     "ADLSAdapter",
                     "test.dfs.core.windows.net" /* this is just to show what the value should look like. */);
             final String root = getParameterValueFromUser(
-                    ConfigureParameters.RootPath,
+                    "root path",
                     "ADLSAdapter",
-                    "../example-public-standards");
+                    "../../../../../../example-public-standards");
             final String tenant = getParameterValueFromUser(
-                    ConfigureParameters.Tenant,
+                    "tenant",
                     "ADLSAdapter",
                     "00x000xx-00x0-00xx-00xx-0x0xx000xx00");
             final String clientId = getParameterValueFromUser(
-                    ConfigureParameters.ClientId,
+                    "client ID",
                     "ADLSAdapter",
                     "xxx00x0x-0x00-0000-x0x0-00xxx000xxx0");
             // DEV-NOTE: This is just a mock secret used to demonstrate what a secret should look like.
             // It is not a real secret.
             final String secret = getParameterValueFromUser(
-                    ConfigureParameters.Secret,
+                    "secret",
                     "ADLSAdapter",
-                    "xSDfdzI92d:sd832j8jd@ac823sSglJ");
+                    "dummySecret");
 
             // Default values for the optional parameters used by the ADLS adapter.
             String timeout = "2000";
@@ -346,15 +294,15 @@ public class ConfigureAdaptersTest extends SampleTestBase {
 
             if (configureOptionalParameters("ADLSAdapter")) {
                 timeout = getOptionalParameterValueFromUser(
-                        ConfigureParameters.Timeout,
+                        "timeout",
                         "ADLSAdapter",
                         timeout /* this is just to show what the value should look like. */);
                 maximumTimeout = getOptionalParameterValueFromUser(
-                        ConfigureParameters.MaximumTimeout,
+                        "maximum timeout",
                         "ADLSAdapter",
                         maximumTimeout);
                 numberOfRetries = getOptionalParameterValueFromUser(
-                        ConfigureParameters.NumberOfRetries,
+                        "number of retries",
                         "ADLSAdapter",
                         numberOfRetries);
             }
@@ -368,14 +316,14 @@ public class ConfigureAdaptersTest extends SampleTestBase {
 
             // List the newly configured adapter's properties.
             System.out.println("\nADLSAdapter configured. Properties of this ADLSAdapter are:");
-            System.out.println("  Hostname: " + adapter.getHostname());
-            System.out.println("  Root: " + adapter.getRoot());
-            System.out.println("  Tenant: " + adapter.getTenant());
-            System.out.println("  ClientId: " + adapter.getClientId());
-            System.out.println("  Secret: " + adapter.getSecret());
-            System.out.println("  Timeout: " + adapter.getTimeout());
-            System.out.println("  MaximumTimeout: " + adapter.getMaximumTimeout().toMillis());
-            System.out.println("  NumberOfRetries: " + adapter.getNumberOfRetries());
+            System.out.println("  " + ConfigureParameters.Hostname + ": " + adapter.getHostname());
+            System.out.println("  " + ConfigureParameters.Root + ": " + adapter.getRoot());
+            System.out.println("  " + ConfigureParameters.Tenant + ": " + adapter.getTenant());
+            System.out.println("  " + ConfigureParameters.ClientId + ": " + adapter.getClientId());
+            System.out.println("  " + ConfigureParameters.Secret + ": " + adapter.getSecret());
+            System.out.println("  " + ConfigureParameters.Timeout + ": " + adapter.getTimeout().toMillis());
+            System.out.println("  " + ConfigureParameters.MaximumTimeout + ": " + adapter.getMaximumTimeout().toMillis());
+            System.out.println("  " + ConfigureParameters.NumberOfRetries + ": " + adapter.getNumberOfRetries());
             System.out.println();
         }
     }
@@ -388,7 +336,7 @@ public class ConfigureAdaptersTest extends SampleTestBase {
      * @return The user-specified parameter value.
      */
     private static String getParameterValueFromUser(
-            final ConfigureParameters parameter,
+            final String parameter,
             final String adapter) {
         return getParameterValueFromUser(parameter, adapter, null);
     }
@@ -402,7 +350,7 @@ public class ConfigureAdaptersTest extends SampleTestBase {
      * @return The user-specified parameter value.
      */
     private static String getParameterValueFromUser(
-            final ConfigureParameters parameter,
+            final String parameter,
             final String adapter,
             final String example) {
         if (example == null) {
@@ -453,7 +401,7 @@ public class ConfigureAdaptersTest extends SampleTestBase {
      * @return The user-specified optional parameter value.
      */
     private static String getOptionalParameterValueFromUser(
-            final ConfigureParameters parameter,
+            final String parameter,
             final String adapter) {
         return getOptionalParameterValueFromUser(parameter, adapter, null);
     }
@@ -467,7 +415,7 @@ public class ConfigureAdaptersTest extends SampleTestBase {
      * @return The user-specified optional parameter value.
      */
     private static String getOptionalParameterValueFromUser(
-            final ConfigureParameters parameter,
+            final String parameter,
             final String adapter,
             final String example) {
         if (example == null) {
@@ -479,7 +427,7 @@ public class ConfigureAdaptersTest extends SampleTestBase {
         String value;
         while (true) {
             // Get the user's input.
-            value = SCANNER.nextLine().trim();
+            value = SCANNER.nextLine().trim().replace("\uFEFF", "");
             if (!StringUtils.isNullOrTrimEmpty(value)) {
                 // Input must be numeric.
                 try {
@@ -511,7 +459,7 @@ public class ConfigureAdaptersTest extends SampleTestBase {
     }
 
     private enum ConfigureParameters {
-        HostName,
+        Hostname,
         Root,
         SharedKey,
         Timeout,

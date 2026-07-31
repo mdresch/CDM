@@ -16,7 +16,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
         /// <summary>
         /// The path between TestDataPath and TestName.
         /// </summary>
-        private string testsSubpath = Path.Combine("Cdm", "Resolution", "CircularResolution");
+        private string testsSubpath = Path.Combine("Cdm", "Resolution", "CircularResolutionTest");
 
         /// <summary>
         /// Test proper behavior for entities that contain circular references
@@ -36,8 +36,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
                 ((CdmAttributeGroupReference)resCustomerStructured.Attributes[1]).ExplicitReference as CdmAttributeGroupDefinition;
             CdmAttributeGroupDefinition customerGroupAtt =
                 ((CdmAttributeGroupReference)storeGroupAtt.Members[1]).ExplicitReference as CdmAttributeGroupDefinition;
-            Assert.AreEqual(customerGroupAtt.Members.Count, 1);
-            Assert.AreEqual(((CdmTypeAttributeDefinition)customerGroupAtt.Members[0]).Name, "customerId");
+            Assert.AreEqual(1, customerGroupAtt.Members.Count);
+            Assert.AreEqual("customerId", ((CdmTypeAttributeDefinition)customerGroupAtt.Members[0]).Name);
         }
 
         /// <summary>
@@ -51,12 +51,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
             await cdmCorpus.CalculateEntityGraphAsync(manifest);
             await manifest.PopulateManifestRelationshipsAsync();
 
-            Assert.AreEqual(manifest.Relationships.Count, 1);
+            Assert.AreEqual(1, manifest.Relationships.Count);
             CdmE2ERelationship rel = manifest.Relationships[0];
-            Assert.AreEqual(rel.FromEntity, "CustTable.cdm.json/CustTable");
-            Assert.AreEqual(rel.ToEntity, "CustTable.cdm.json/CustTable");
-            Assert.AreEqual(rel.FromEntityAttribute, "FactoringAccountRelationship");
-            Assert.AreEqual(rel.ToEntityAttribute, "PaymTermId");
+            Assert.AreEqual("CustTable.cdm.json/CustTable", rel.FromEntity);
+            Assert.AreEqual("CustTable.cdm.json/CustTable", rel.ToEntity);
+            Assert.AreEqual("FactoringAccountRelationship", rel.FromEntityAttribute);
+            Assert.AreEqual("PaymTermId", rel.ToEntityAttribute);
         }
     }
 }

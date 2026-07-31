@@ -5,6 +5,7 @@ package com.microsoft.commondatamodel.objectmodel.utilities;
 
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmAttributeContext;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmDocumentDefinition;
+import com.microsoft.commondatamodel.objectmodel.cdm.CdmEntityDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmObject;
 import com.microsoft.commondatamodel.objectmodel.enums.ImportsLoadStrategy;
 
@@ -29,10 +30,6 @@ public class ResolveOptions {
    */
   private ImportsLoadStrategy importsLoadStrategy = ImportsLoadStrategy.LazyLoad;
   /**
-   * When enabled, all the imports will be loaded and the references checked otherwise will be delayed until the symbols are required.
-   */
-  private Boolean strictValidation = true;
-  /**
    * The limit for the number of resolved attributes allowed per entity. if the number is exceeded, the resolution will fail
    */
   private Integer resolvedAttributeLimit = 4000;
@@ -40,6 +37,10 @@ public class ResolveOptions {
    * The maximum value for the end ordinal in an ArrayExpansion operation
    */
   private int maxOrdinalForArrayExpansion = 20;
+  /**
+   * The maximum depth that entity attributes will be resolved before giving up
+   */
+  private int maxDepth = 2;
   /**
    * When references get copied, use previous resolution results if available (for use with copy
    * method).
@@ -75,6 +76,15 @@ public class ResolveOptions {
   @Deprecated
   public boolean inCircularReference;
   private HashMap<CdmAttributeContext, CdmAttributeContext> mapOldCtxToNewCtx;
+  /**
+   * @deprecated
+   */
+  public HashSet<CdmEntityDefinition> currentlyResolvingEntities;
+  /**
+   * Indicates if resolution guidance was used at any point during resolution
+   * @deprecated
+   */
+  public boolean usedResolutionGuidance = false;
 
   /**
    * Creates a new instance of Resolve Options using most common parameters.
@@ -121,10 +131,8 @@ public class ResolveOptions {
     this.symbolRefSet = new SymbolSet();
 
     this.depthInfo = new DepthInfo();
-    this.depthInfo.setCurrentDepth(0);
-    this.depthInfo.setMaxDepthExceeded(false);
-
     this.inCircularReference = false;
+    this.currentlyResolvingEntities = new HashSet<CdmEntityDefinition>();
   }
 
   /**
@@ -154,6 +162,7 @@ public class ResolveOptions {
   }
 
   /**
+   * @return Boolean
    * @deprecated please use importsLoadStrategy instead.
    */
   @Deprecated
@@ -276,6 +285,14 @@ public class ResolveOptions {
     this.localizeReferencesFor = localizeReferencesFor;
   }
 
+  public int getMaxDepth() {
+    return maxDepth;
+  }
+
+  public void setMaxDepth(final int maxDepth) {
+    this.maxDepth = maxDepth;
+  }
+
   /**
    * Returns a new copy of this object.
    *
@@ -284,15 +301,8 @@ public class ResolveOptions {
   public ResolveOptions copy() {
     final ResolveOptions resOptCopy = new ResolveOptions();
     resOptCopy.wrtDoc = this.wrtDoc;
-    if (this.depthInfo != null) {
-      resOptCopy.depthInfo = new DepthInfo();
-      resOptCopy.depthInfo.setMaxDepth(this.depthInfo.getMaxDepth());
-      resOptCopy.depthInfo.setCurrentDepth(this.depthInfo.getCurrentDepth());
-      resOptCopy.depthInfo.setMaxDepthExceeded(this.depthInfo.getMaxDepthExceeded());
-    }
-    if (this.directives != null) {
-      resOptCopy.directives = this.directives.copy();
-    }
+    resOptCopy.depthInfo = this.depthInfo.copy();
+    resOptCopy.maxDepth = this.maxDepth;
     resOptCopy.localizeReferencesFor = this.localizeReferencesFor;
     resOptCopy.indexingDoc = this.indexingDoc;
     resOptCopy.shallowValidation = this.shallowValidation;
@@ -300,6 +310,12 @@ public class ResolveOptions {
     resOptCopy.setMapOldCtxToNewCtx(this.mapOldCtxToNewCtx); // ok to share this map
     resOptCopy.importsLoadStrategy = this.importsLoadStrategy;
     resOptCopy.saveResolutionsOnCopy = this.saveResolutionsOnCopy;
+    resOptCopy.currentlyResolvingEntities = this.currentlyResolvingEntities; // ok to share this map
+    resOptCopy.usedResolutionGuidance = this.usedResolutionGuidance;
+
+    if (this.directives != null) {
+      resOptCopy.directives = this.directives.copy();
+    }
 
     return resOptCopy;
   }
@@ -337,7 +353,7 @@ public class ResolveOptions {
   /**
    * @deprecated This function is extremely likely to be removed in the public interface, and not meant
    * to be called externally at all. Please refrain from using it.
-   * @param mapOldCtxToNewCtx LinkedHashMap<CdmAttributeContext, CdmAttributeContext>
+   * @param mapOldCtxToNewCtx LinkedHashMap of CdmAttributeContext and CdmAttributeContext
    */
   @Deprecated
   public void setMapOldCtxToNewCtx(final HashMap<CdmAttributeContext, CdmAttributeContext> mapOldCtxToNewCtx) {
@@ -349,11 +365,15 @@ public class ResolveOptions {
    * @return Document to be used as starting point when resolving the CdmObject passed as argument.
    */
   private static CdmDocumentDefinition fetchDocument(CdmObject obj) {
-      if (obj == null || obj.getOwner() == null) {
+      if (obj == null) {
           return null;
       }
 
-      return obj.getOwner().getInDocument();
+      if (obj.getInDocument() != null) {
+        return obj.getInDocument();
+      }
+
+      return obj.getOwner() != null ? obj.getOwner().getInDocument() : null;
   }
 
   /**

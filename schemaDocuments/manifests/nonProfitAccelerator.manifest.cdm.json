@@ -1,7 +1,12 @@
 {
+  "documentVersion": "1.4",
   "$schema": "CdmManifest.cdm.json",
   "jsonSchemaSemanticVersion": "1.0.0",
-  "imports": [],
+  "imports": [
+    {
+      "corpusPath": "/core/cdsConcepts.cdm.json"
+    }
+  ],
   "manifestName": "Supporting Entities",
   "entities": [
     {
@@ -70,7 +75,10 @@
       "fromEntity": "/core/applicationCommon/Address.cdm.json/Address",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Address.cdm.json/Address",
@@ -166,7 +174,10 @@
       "fromEntity": "/core/applicationCommon/SLA.cdm.json/SLA",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/CampaignResponse.cdm.json/CampaignResponse",
@@ -196,7 +207,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/CampaignResponse.cdm.json/CampaignResponse",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/CampaignResponse.cdm.json/CampaignResponse",
@@ -208,7 +222,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",

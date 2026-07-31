@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
@@ -26,7 +26,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
             Utils.AddListToCdmCollection(attributeGroup.ExhibitsTraits, Utils.CreateTraitReferenceList(ctx, obj["exhibitsTraits"]));
             if (obj["members"] != null)
             {
-                foreach(var att in obj["members"])
+                foreach (var att in obj["members"])
                     attributeGroup.Members.Add(Utils.CreateAttribute(ctx, att, entityName));
             }
 

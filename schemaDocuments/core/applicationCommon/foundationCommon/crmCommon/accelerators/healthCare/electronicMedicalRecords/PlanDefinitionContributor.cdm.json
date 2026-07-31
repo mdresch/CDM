@@ -1,4 +1,5 @@
 {
+  "documentVersion": "1.4",
   "jsonSchemaSemanticVersion": "1.0.0",
   "imports": [
     {
@@ -47,7 +48,7 @@
           "arguments": [
             {
               "name": "versionNumber",
-              "value": "1.2"
+              "value": "1.4"
             }
           ]
         }
@@ -563,22 +564,26 @@
                               [
                                 "en",
                                 "Author",
-                                "935000000"
+                                "935000000",
+                                "0000"
                               ],
                               [
                                 "en",
                                 "Editor",
-                                "935000001"
+                                "935000001",
+                                "0010"
                               ],
                               [
                                 "en",
                                 "Reviewer",
-                                "935000002"
+                                "935000002",
+                                "0020"
                               ],
                               [
                                 "en",
                                 "Endorser",
-                                "935000003"
+                                "935000003",
+                                "0030"
                               ]
                             ]
                           }

@@ -6,18 +6,19 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence
     using Microsoft.CommonDataModel.ObjectModel.Cdm;
     using Microsoft.CommonDataModel.ObjectModel.Enums;
     using Microsoft.CommonDataModel.ObjectModel.Persistence;
-    using Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson;
-    using Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson.types;
+    using Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder.Types;
     using Microsoft.CommonDataModel.ObjectModel.Storage;
     using Microsoft.CommonDataModel.ObjectModel.Utilities;
     using Microsoft.CommonDataModel.Tools.Processor;
     using Microsoft.VisualStudio.TestTools.UnitTesting;
     using Newtonsoft.Json;
     using Newtonsoft.Json.Linq;
+    using Newtonsoft.Json.Serialization;
     using System;
     using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Threading.Tasks;
 
     [TestClass]
@@ -48,6 +49,27 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence
                 Assert.Fail("Error should not be thrown when input json is invalid.");
             }
             Assert.IsNull(invalidManifest);
+        }
+
+        /// <summary>
+        /// Test that CDM does not modify gloabl JsonConvert settings
+        /// </summary>
+        [TestMethod]
+        public async Task TestDateTimeSerializerSettings()
+        {
+            // Create DefaultSettings that do not line up with CDM settings
+            Func<JsonSerializerSettings> defaultSettings = () => new JsonSerializerSettings
+            {
+                DateParseHandling = DateParseHandling.DateTime,
+            };
+            JsonConvert.DefaultSettings = defaultSettings;
+
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, nameof(TestDateTimeSerializerSettings));
+
+            // fetch object to use custom serializer, but does not overwrite DefaultSettings
+            await corpus.FetchObjectAsync<CdmManifestDefinition>("empty.Manifest.cdm.json");
+
+            Assert.AreEqual(JsonConvert.DefaultSettings, defaultSettings);
         }
 
         /// <summary>
@@ -93,7 +115,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence
             await manifestFromModelJson.SaveAsAsync(newManifestFromModelJsonName, true);
             // Verify that model.json persistence was called by comparing the saved document to the original model.json.
             serializedManifest = allDocs[$"/{newManifestFromModelJsonName}"];
-            expectedOutputManifest = TestHelper.GetExpectedOutputFileContent(testsSubpath, testName, manifestFromModelJson.Name);
+            expectedOutputManifest = TestHelper.GetExpectedOutputFileContent(testsSubpath, testName, $"{manifestFromModelJson.ManifestName}{PersistenceLayer.ManifestExtension}");
             TestHelper.AssertSameObjectWasSerialized(expectedOutputManifest, serializedManifest);
         }
 
@@ -124,11 +146,52 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence
             await manifestFromModelJson.SaveAsAsync(newManifestFromModelJsonName, true);
             // Verify that model.json persistence was called by comparing the saved document to the original model.json.
             var serializedManifest = allDocs[$"/sub-folder/{newManifestFromModelJsonName}"];
-            var expectedOutputManifest = TestHelper.GetExpectedOutputFileContent(testsSubpath, testName, manifestFromModelJson.Name);
+            var expectedOutputManifest = TestHelper.GetExpectedOutputFileContent(testsSubpath, testName, $"{manifestFromModelJson.ManifestName}{PersistenceLayer.ManifestExtension}");
             TestHelper.AssertSameObjectWasSerialized(expectedOutputManifest, serializedManifest);
         }
+
+        /// <summary>
+        /// Test setting SaveConfigFile to false and checking if the file is not saved.
+        /// </summary>
+        /// <returns></returns>
+        [TestMethod]
+        public async Task TestNotSavingConfigFile()
+        {
+            var testName = nameof(TestNotSavingConfigFile);
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, testName);
+
+            // Load manifest from input folder.
+            var manifest = await corpus.FetchObjectAsync<CdmManifestDefinition>("default.manifest.cdm.json");
+
+            // Move manifest to output folder.
+            var outputFolder = corpus.Storage.FetchRootFolder("output");
+            foreach (var entityDec in manifest.Entities)
+            {
+                var entity = await corpus.FetchObjectAsync<CdmEntityDefinition>(entityDec.EntityPath, manifest);
+                outputFolder.Documents.Add(entity.InDocument);
+            }
+
+            outputFolder.Documents.Add(manifest);
+
+            // Make sure the output folder is empty.
+            TestHelper.DeleteFilesFromActualOutput(TestHelper.GetActualOutputFolderPath(testsSubpath, testName));
+
+            // Save manifest to output folder.
+            var copyOptions = new CopyOptions()
+            {
+                SaveConfigFile = false
+            };
+
+            await manifest.SaveAsAsync("default.manifest.cdm.json", false, copyOptions);
+
+            // Compare the result.
+            TestHelper.AssertFolderFilesEquality(
+                TestHelper.GetExpectedOutputFolderPath(testsSubpath, testName),
+                TestHelper.GetActualOutputFolderPath(testsSubpath, testName));
+        }
+
         /// <summary>/// 
-        /// Test that saving a model.json or odi.json that isn't named exactly as such fails to save. 
+        /// Test that saving a model.json that isn't named exactly as such fails to save. 
         /// </summary>
         [TestMethod]
         public async Task TestSavingInvalidModelJsonName()
@@ -139,7 +202,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence
             corpus.Storage.DefaultNamespace = "local";
             var manifest = new CdmManifestDefinition(corpus.Ctx, "manifest");
             corpus.Storage.FetchRootFolder("local").Documents.Add(manifest);
-
 
             ConcurrentDictionary<string, string> allDocs = new ConcurrentDictionary<string, string>();
             var testAdapter = new TestStorageAdapter(allDocs);
@@ -219,7 +281,9 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence
         [TestMethod]
         public async Task TestMissingPersistenceFormat()
         {
-            CdmCorpusDefinition corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestMissingPersistenceFormat");
+            var expectedLogCodes = new HashSet<CdmLogCode> { CdmLogCode.ErrPersistClassMissing };
+            CdmCorpusDefinition corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestMissingPersistenceFormat", expectedCodes: expectedLogCodes);
+
             CdmFolderDefinition folder = corpus.Storage.FetchRootFolder(corpus.Storage.DefaultNamespace);
 
             CdmManifestDefinition manifest = corpus.MakeObject<CdmManifestDefinition>(CdmObjectType.ManifestDef, "someManifest");
@@ -227,6 +291,177 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence
             // trying to save to an unsupported format should return false and not fail
             bool succeded = await manifest.SaveAsAsync("manifest.unSupportedExtension");
             Assert.IsFalse(succeded);
+        }
+
+        /// <summary>
+        /// Test that a document is Saved and fetched using the syms persistence class.
+        /// </summary>
+        [TestMethod]
+        public async Task TestSymsSavingAndFetchingDocument()
+        {
+            SymsTestHelper.CheckSymsEnvironment();
+            var symsAdapter = SymsTestHelper.CreateAdapterWithClientId();
+            await SymsTestHelper.CleanDatabase(symsAdapter, SymsTestHelper.DatabaseName);
+
+            var corpus = TestHelper.GetLocalCorpus(this.testsSubpath, nameof(this.TestSymsSavingAndFetchingDocument));
+            corpus.Storage.Unmount("remote");
+
+            var adlsAdapter1 = SymsTestHelper.CreateADLSAdapterWithClientIdWithSharedKey(1);
+            var adlsAdapter2 = SymsTestHelper.CreateADLSAdapterWithClientIdWithSharedKey(2);
+
+            corpus.Storage.Mount("adls1", adlsAdapter1);
+            corpus.Storage.Mount("adls2", adlsAdapter2);
+            corpus.Storage.Mount("syms", symsAdapter);
+
+            var expectedManifest = await corpus.FetchObjectAsync<CdmManifestDefinition>("default.manifest.cdm.json");
+            expectedManifest.ManifestName = SymsTestHelper.DatabaseName;
+            await TestSymsSaveManifest(expectedManifest);
+            await TestSymsFetchManifest(corpus, expectedManifest, "default.manifest.cdm.json");
+            await TestSymsFetchDocument(corpus, expectedManifest);
+
+            var expectedModifiedManifest = await corpus.FetchObjectAsync<CdmManifestDefinition>("defaultmodified.manifest.cdm.json");
+            expectedModifiedManifest.ManifestName = SymsTestHelper.DatabaseName;
+            expectedModifiedManifest.Entities[0].LastFileModifiedTime = DateTimeOffset.UtcNow;
+            await TestSymsSaveManifest(expectedModifiedManifest);
+            await TestSymsFetchManifest(corpus, expectedModifiedManifest, "defaultmodified.manifest.cdm.json");
+            await TestSymsFetchDocument(corpus, expectedModifiedManifest);
+
+            var tasks = new List<Func<Task>>
+            {
+                TestSymsSmartADLSAdapterMountLogic,
+                TestSymsSmartADLSAdapterMountLogic,
+                TestSymsSmartADLSAdapterMountLogic,
+                TestSymsSmartADLSAdapterMountLogic
+            };
+            await Task.WhenAll(tasks.AsParallel().Select(async task => await task()));
+
+            await SymsTestHelper.CleanDatabase(symsAdapter, SymsTestHelper.DatabaseName);
+        }
+
+        /// <summary>
+        /// Test loading a manifest that contains Spark Partitions.
+        /// </summary>
+        [TestMethod]
+        [Ignore]
+        public async Task TestSymsLoadSparkPartition()
+        {
+            SymsTestHelper.CheckSymsEnvironment();
+
+            // TODO: uncomment when bug 852342 is fixed.
+            //var corpus = TestHelper.GetLocalCorpus(this.testsSubpath, nameof(this.TestSymsLoadSparkPartition));
+            var corpus = new CdmCorpusDefinition();
+            corpus.Storage.Unmount("remote");
+
+            var symsAdapter = SymsTestHelper.CreateAdapterWithClientId();
+            corpus.Storage.Mount("syms", symsAdapter);
+
+            var adlsAdapter = SymsTestHelper.CreateADLSAdapterWithClientIdWithSharedKey(1);
+            corpus.Storage.Mount("adls", adlsAdapter);
+
+            var tableName = "SparkPartitionTest";
+            var manifest = await corpus.FetchObjectAsync<CdmManifestDefinition>($"syms:/default/{tableName}.manifest.cdm.json");
+
+            Assert.IsNotNull(manifest);
+            Assert.AreEqual(1, manifest.Entities[0].DataPartitionPatterns.Count);
+            Assert.AreEqual(0, manifest.Entities[0].DataPartitions.Count);
+
+            await manifest.FileStatusCheckAsync();
+
+            Assert.AreEqual(4, manifest.Entities[0].DataPartitions.Count);
+        }
+
+        /// <summary>
+        /// Test that the persistence layer handles the case when the document is empty.
+        /// </summary>
+        [TestMethod]
+        public async Task TestLoadingEmptyJsonData()
+        {
+            HashSet<CdmLogCode> expectedCodes = new HashSet<CdmLogCode>();
+            expectedCodes.Add(CdmLogCode.ErrPersistFileReadFailure);
+
+            CdmCorpusDefinition corpus = TestHelper.GetLocalCorpus(testsSubpath, nameof(TestLoadingEmptyJsonData), null, false, expectedCodes, false);
+
+            var manifest = await corpus.FetchObjectAsync<CdmManifestDefinition>("empty.Manifest.cdm.json");
+            Assert.IsNull(manifest);
+            TestHelper.AssertCdmLogCodeEquality(corpus, CdmLogCode.ErrPersistFileReadFailure, true);
+        }
+
+        /// <summary>
+        /// Test that a document is saved using the syms persistence class.
+        /// </summary>
+        async Task TestSymsSaveManifest(CdmManifestDefinition manifest)
+        {
+            Assert.IsTrue(await manifest.SaveAsAsync($"syms:/{manifest.ManifestName}/{manifest.ManifestName}.manifest.cdm.json"));
+        }
+
+        /// <summary>
+        /// Test that a manifest document is fetched using the syms persistence class.
+        /// </summary>
+        async Task TestSymsFetchManifest(CdmCorpusDefinition corpus, CdmManifestDefinition manifestExpected, string filename, string threadnumber = "")
+        {
+            var manifestReadDatabases = await corpus.FetchObjectAsync<CdmManifestDefinition>($"syms:/databases.manifest.cdm.json");
+            Assert.IsNotNull(manifestReadDatabases);
+            Assert.AreEqual("databases.manifest.cdm.json", manifestReadDatabases.ManifestName);
+
+            if (!manifestReadDatabases.SubManifests.AllItems.Exists(item => item.ManifestName == manifestExpected.ManifestName))
+            {
+                Assert.Fail($"Database {manifestExpected.ManifestName} does not exist.");
+            }
+
+            var manifestActual = await corpus.FetchObjectAsync<CdmManifestDefinition>($"syms:/{manifestExpected.ManifestName}/{manifestExpected.ManifestName}.manifest.cdm.json", manifestReadDatabases, null, true);
+            await manifestActual.SaveAsAsync($"output:/{filename}{threadnumber}");
+
+            var actualContentString = TestHelper.GetActualOutputFileContent(testsSubpath, nameof(TestSymsSavingAndFetchingDocument), filename);
+            var expectedContent = PersistenceLayer.ToData<CdmManifestDefinition, ManifestContent>(manifestExpected, null, null, "CdmFolder");
+            var expectedContentString = TestHelper.JTokenToString(expectedContent);
+            TestHelper.AssertSameObjectWasSerialized(actualContentString, expectedContentString);
+        }
+
+        /// <summary>
+        /// Test that a document is fetched using the syms persistence class.
+        /// </summary>
+        async Task TestSymsFetchDocument(CdmCorpusDefinition corpus, CdmManifestDefinition manifestExpected)
+        {
+            foreach (var ent in manifestExpected.Entities)
+            {
+                var doc = await corpus.FetchObjectAsync<CdmDocumentDefinition>($"syms:/{manifestExpected.ManifestName}/{ent.EntityName}.cdm.json");
+                Assert.IsNotNull(doc);
+                Assert.IsTrue(string.Equals($"{ent.EntityName}.cdm.json", doc.Name));
+                await doc.SaveAsAsync($"output:/{doc.Name}");
+
+                var docLocal = await corpus.FetchObjectAsync<CdmDocumentDefinition>(doc.Name);
+
+                var actualContentString = TestHelper.GetActualOutputFileContent(testsSubpath, nameof(TestSymsSavingAndFetchingDocument), doc.Name);
+
+                var expectedContent = PersistenceLayer.ToData<CdmDocumentDefinition, DocumentContent>(docLocal, null, null, "CdmFolder");
+                var expetedContentString = TestHelper.JTokenToString(expectedContent);
+
+                TestHelper.AssertSameObjectWasSerialized(actualContentString, expetedContentString);
+            }
+        }
+
+        /// <summary>
+        /// Test automatic mounting of adls adapter in syms if does not exist.
+        /// </summary>
+        async Task TestSymsSmartADLSAdapterMountLogic()
+        {
+            var symsAdapter = SymsTestHelper.CreateAdapterWithClientId();
+            var corpus = new CdmCorpusDefinition();
+            corpus.SetEventCallback(new EventCallback { Invoke = CommonDataModelLoader.ConsoleStatusReport }, CdmStatusLevel.Warning);
+            corpus.Storage.Mount("syms", symsAdapter);
+
+            var adlsAdapter1 = SymsTestHelper.CreateADLSAdapterWithClientIdWithSharedKey(1);
+            var adlsAdapter2 = SymsTestHelper.CreateADLSAdapterWithClientIdWithSharedKey(2);
+
+            int countAdapterCountBefore = corpus.Storage.NamespaceAdapters.Count;
+            var manifestReadDatabases = await corpus.FetchObjectAsync<CdmManifestDefinition>($"syms:/databases.manifest.cdm.json");
+            var manifest = await corpus.FetchObjectAsync<CdmManifestDefinition>($"syms:/{manifestReadDatabases.SubManifests[0].ManifestName}/{manifestReadDatabases.SubManifests[0].ManifestName}.manifest.cdm.json", manifestReadDatabases, null, true);
+
+            int countAdapterCountAfter = corpus.Storage.NamespaceAdapters.Count;
+
+            Assert.AreEqual(countAdapterCountBefore + 2, countAdapterCountAfter);
+            Assert.IsNotNull(corpus.Storage.AdapterPathToCorpusPath($"https://{adlsAdapter1.Hostname}{adlsAdapter1.Root}"));
+            Assert.IsNotNull(corpus.Storage.AdapterPathToCorpusPath($"https://{adlsAdapter2.Hostname}{adlsAdapter2.Root}"));
         }
     }
 }

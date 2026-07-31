@@ -5,6 +5,7 @@ from typing import Optional, TYPE_CHECKING
 
 from cdm.enums import CdmObjectType
 from cdm.objectmodel.projections.cardinality_settings import CardinalitySettings
+from cdm.utilities import DepthInfo
 
 if TYPE_CHECKING:
     from cdm.objectmodel import CdmObjectDefinition, CdmObjectReference
@@ -20,25 +21,16 @@ class ProjectionDirective:
     """
 
     def __init__(self, res_opt: 'ResolveOptions', owner: 'CdmObjectDefinition', owner_ref: Optional['CdmObjectReference'] = None):
-        # Max depth default
-        self._max_depth_default = 2  # type: int
-
-        # Max depth if 'noMaxDepth' is undefined
-        self._max_depth_has_no_max = 32  # type: int
-
         # --- internal ---
 
         # Resolution option used
         self._res_opt = res_opt  # type: ResolveOptions
 
-        # The calling referencing EntityDef or the EntityAttributeDef that contains this projection
+        # The calling referencing EntityDef, the EntityAttributeDef, or the TypeAttributeDef that contains this projection
         self._owner = owner  # type: CdmObjectDefinition
 
-        # The EntityRef to the owning EntityDef or EntityAttributeDef
+        # The EntityRef to the owning EntityDef, EntityAttributeDef, or TypeAttributeDef
         self._owner_ref = owner_ref  # type: CdmObjectReference
-
-        # Is Owner EntityDef or EntityAttributeDef
-        self._owner_type = owner.object_type if owner else CdmObjectType.ERROR  # type: CdmObjectType
 
         if owner and owner.object_type == CdmObjectType.ENTITY_ATTRIBUTE_DEF:
             # If EntityAttributeDef - then the Cardinality from the Owner EntityAttributeDef
@@ -68,20 +60,16 @@ class ProjectionDirective:
         # Is array
         self._is_array = res_opt.directives.has('isArray') == True if res_opt.directives else False  # type: Optional[bool]
 
-        # Current depth of reference
-        if res_opt.depth_info is not None:
-            self._current_depth = 1 if res_opt and res_opt.depth_info == None else res_opt.depth_info.current_depth + 1  # type: Optional[int]
-            res_opt.depth_info.current_depth = self._current_depth
-
-        # if noMaxDepth directive the max depth is 32 else defaults to 2
+        # if noMaxDepth directive the max depth is 32 else defaults to what was set by the user
         # these depths were arbitrary and were set for the resolution guidance
         # re-using the same for projections as well
-        self._maximum_depth = self._max_depth_has_no_max if self._has_no_maximum_depth else self._max_depth_default  # type: Optional[int]
+        self._maximum_depth = DepthInfo.MAX_DEPTH_LIMIT if self._has_no_maximum_depth else res_opt.max_depth  # type: Optional[int]
 
     @property
-    def _original_source_entity_attribute_name(self) -> str:
+    def _original_source_attribute_name(self) -> str:
         """
         The entity attribute name or "{a/A}"
         This may pass through at each operation action/transformation
         """
-        return self._owner.get_name() if self._owner.object_type == CdmObjectType.ENTITY_ATTRIBUTE_DEF else None
+        return self._owner.get_name() if self._owner.object_type == CdmObjectType.ENTITY_ATTRIBUTE_DEF \
+                                         or self._owner.object_type == CdmObjectType.TYPE_ATTRIBUTE_DEF else None

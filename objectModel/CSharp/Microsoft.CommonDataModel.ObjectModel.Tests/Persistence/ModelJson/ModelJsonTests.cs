@@ -18,6 +18,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
     using Microsoft.CommonDataModel.ObjectModel.Persistence;
     using Microsoft.CommonDataModel.ObjectModel.Enums;
     using Microsoft.CommonDataModel.ObjectModel.Storage;
+    using Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson.types;
 
     /// <summary>
     /// The model json tests.
@@ -72,7 +73,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
             watch.Stop();
             Assert.Performance(9800, watch.ElapsedMilliseconds, "Parsing to data");
 
-            this.HandleOutput(nameof(TestLoadingCdmFolderAndModelJsonToData), PersistenceLayer.ModelJsonExtension, obtainedModelJson);
+            this.HandleOutput(nameof(TestLoadingCdmFolderAndModelJsonToData), "model.json", obtainedModelJson, isLanguageSpecific: true);
         }
 
         /// <summary>
@@ -145,6 +146,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
             obtainedModelJson.Entities.ForEach(RemoveDescriptionFromEntityIfEmpty);
             obtainedModelJson.Description = null;
 
+            Assert.IsNull(cdmManifest.Imports.Item(Constants.FoundationsCorpusPath, checkMoniker: false));
+            Assert.AreEqual(1, obtainedModelJson.Imports.Count);
+            Assert.AreEqual(Constants.FoundationsCorpusPath, obtainedModelJson.Imports[0].CorpusPath);
+
             this.HandleOutput(nameof(TestLoadingCdmFolderResultAndModelJsonToData), PersistenceLayer.ModelJsonExtension, obtainedModelJson);
         }
 
@@ -162,7 +167,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
             {
                 Invoke = (CdmStatusLevel statusLevel, string message1) =>
                 {
-                    if (statusLevel >= CdmStatusLevel.Error)
+                    if (statusLevel >= CdmStatusLevel.Warning)
                     {
                         Assert.Fail(message1);
                     }
@@ -183,7 +188,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
             // the corpus path in the imports are relative to the document where it was defined.
             // when saving in model.json the documents are flattened to the manifest level
             // so it is necessary to recalculate the path to be relative to the manifest.
-            var corpus = TestHelper.GetLocalCorpus("notImportant", "notImportantLocation");
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, "notImportantLocation");
             var folder = corpus.Storage.FetchRootFolder("local");
 
             var manifest = new CdmManifestDefinition(corpus.Ctx, "manifest");
@@ -226,7 +231,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
             {
                 EntityPath = "remote:/contoso/entity1.model.json/Entity1"
             };
-            var modelIdTrait1 = referenceEntity1.ExhibitsTraits.Add("is.propertyContent.multiTrait");
+            var modelIdTrait1 = referenceEntity1.ExhibitsTraits.Add("is.propertyContent.multiTrait") as CdmTraitReference;
             modelIdTrait1.IsFromProperty = true;
             modelIdTrait1.Arguments.Add("modelId", "f19bbb97-c031-441a-8bd1-61b9181c0b83/1a7ef9c8-c7e8-45f8-9d8a-b80f8ffe4612");
             manifest.Entities.Add(referenceEntity1);
@@ -243,7 +248,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
             {
                 EntityPath = "remote:/contoso/entity3.model.json/Entity3"
             };
-            var modelIdTrait3 = referenceEntity3.ExhibitsTraits.Add("is.propertyContent.multiTrait");
+            var modelIdTrait3 = referenceEntity3.ExhibitsTraits.Add("is.propertyContent.multiTrait") as CdmTraitReference;
             modelIdTrait3.IsFromProperty = true;
             modelIdTrait3.Arguments.Add("modelId", "3b2e040a-c8c5-4508-bb42-09952eb04a50");
             manifest.Entities.Add(referenceEntity3);
@@ -253,7 +258,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
             {
                 EntityPath = "remote:/contoso/entity.model.json/Entity4"
             };
-            var modelIdTrait4 = referenceEntity4.ExhibitsTraits.Add("is.propertyContent.multiTrait");
+            var modelIdTrait4 = referenceEntity4.ExhibitsTraits.Add("is.propertyContent.multiTrait") as CdmTraitReference;
             modelIdTrait4.IsFromProperty = true;
             modelIdTrait4.Arguments.Add("modelId", "f19bbb97-c031-441a-8bd1-61b9181c0b83/1a7ef9c8-c7e8-45f8-9d8a-b80f8ffe4612");
             manifest.Entities.Add(referenceEntity4);
@@ -305,6 +310,22 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
         }
 
         /// <summary>
+        /// Tests that traits that convert into annotations are properly converted on load and save
+        /// </summary>
+        [Test]
+        public async Task TestLoadingAndSavingCdmTraits()
+        {
+            var cdmCorpus = TestHelper.GetLocalCorpus(testsSubpath, nameof(TestLoadingAndSavingCdmTraits));
+            var manifest = await cdmCorpus.FetchObjectAsync<CdmManifestDefinition>("model.json");
+            var entity = await cdmCorpus.FetchObjectAsync<CdmEntityDefinition>("someEntity.cdm.json/someEntity");
+            Assert.NotNull(entity.ExhibitsTraits.Item("is.CDM.entityVersion"));
+
+            var manifestData = await ManifestPersistence.ToData(manifest, new ResolveOptions(manifest.InDocument), new CopyOptions());
+            var versionAnnotation = (manifestData.Entities[0]["annotations"][0]).ToObject<Annotation>();
+            Assert.AreEqual("<version>", versionAnnotation.Value);
+        }
+
+        /// <summary>
         /// Tests that the "date" and "time" data types are correctly loaded/saved from/to a model.json.
         /// </summary>
         [Test]
@@ -337,6 +358,35 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
         }
 
         /// <summary>
+        /// Test model.json is correctly created without an entity when the location is not recognized
+        /// </summary>
+        [Test]
+        public async Task TestIncorrectModelLocation()
+        {
+            var expectedLogCodes = new HashSet<CdmLogCode> { CdmLogCode.ErrStorageInvalidAdapterPath, CdmLogCode.ErrPersistModelJsonEntityParsingError, CdmLogCode.ErrPersistModelJsonRefEntityInvalidLocation };
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestIncorrectModelLocation", expectedCodes: expectedLogCodes);
+            var manifest = await corpus.FetchObjectAsync<CdmManifestDefinition>("model.json");
+            Assert.NotNull(manifest);
+            Assert.AreEqual(0, manifest.Entities.Count);
+            TestHelper.AssertCdmLogCodeEquality(corpus, CdmLogCode.ErrPersistModelJsonRefEntityInvalidLocation, true);
+        }
+
+        /// <summary>
+        /// Test resulting manifest file is only added once and manifest name is correctly named
+        /// </summary>
+        [Test]
+        public async Task TestNameOnModelLoad()
+        {
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestNameOnModelLoad");
+            var manifest = await corpus.FetchObjectAsync<CdmManifestDefinition>("model.json");
+            var folder = corpus.Storage.FetchRootFolder("local");
+
+            // folder should contain one manifest, one entity file, and an extensions file
+            Assert.AreEqual(folder.Documents.Count, 3);
+            Assert.AreEqual(manifest.GetName(), "model.json");
+        }
+
+        /// <summary>
         /// Handles the obtained output.
         /// If needed, writes the output to a test debugging file.
         /// It reads expected output and compares it to the actual output.
@@ -345,8 +395,9 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
         /// <param name="testName"> The name of the test.</param>
         /// <param name="outputFileName"> The name of the output file. Used both for expected and actual output.</param>
         /// <param name="actualOutput"> The output obtaind through operations, that is to be compared with the expected output.</param>
-        /// <parameter name="doesWriteDebuggingFiles"> Whether debugging files should be written or not. </parameter>
-        private void HandleOutput<T>(string testName, string outputFileName, T actualOutput, bool doesWriteTestDebuggingFiles = false)
+        /// <parameter name="doesWriteTestDebuggingFiles"> Whether debugging files should be written or not. </parameter>
+        /// <param name="isLanguageSpecific">There is a subfolder called CSharp.</param>
+        private void HandleOutput<T>(string testName, string outputFileName, T actualOutput, bool doesWriteTestDebuggingFiles = false, bool isLanguageSpecific = false)
         {
             var serializedOutput = Serialize(actualOutput);
             if (doesWriteTestDebuggingFiles)
@@ -354,7 +405,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Persistence.ModelJson
                 TestHelper.WriteActualOutputFileContent(testsSubpath, testName, outputFileName, serializedOutput);
             }
 
-            var expectedOutput = TestHelper.GetExpectedOutputFileContent(testsSubpath, testName, outputFileName);
+            var expectedOutput = TestHelper.GetExpectedOutputFileContent(testsSubpath, testName, outputFileName, isLanguageSpecific: isLanguageSpecific);
 
             TestHelper.AssertSameObjectWasSerialized(expectedOutput, serializedOutput);
         }

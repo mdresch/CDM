@@ -7,9 +7,13 @@
         "target": "ES6",
         "sourceMap": true,
         "baseUrl": ".",
-        "outDir": "./lib"
+        "outDir": "./lib",
+        "resolveJsonModule": true,
+        "allowJs": true
     },
-    "files": [
-        "./index.ts"
+    "include": [
+        "./index.ts",
+        "./Utilities/evaluateRegexp.js",
+        "./__test__/**/*.ts"
     ]
 }

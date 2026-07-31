@@ -8,18 +8,25 @@ from cdm.enums import CdmObjectType
 from .cdm_argument_collection import CdmArgumentCollection
 from .cdm_argument_def import CdmArgumentDefinition
 from .cdm_object_ref import CdmObjectReference
+from cdm.objectmodel import CdmTraitReferenceBase, CdmObject
 
 if TYPE_CHECKING:
-    from cdm.objectmodel import CdmArgumentValue, CdmCorpusContext, CdmObject, CdmTraitDefinition
-    from cdm.utilities import FriendlyFormatNode, ResolveOptions, VisitCallback
+    from cdm.objectmodel import CdmArgumentValue, CdmCorpusContext, CdmTraitDefinition, CdmAttributeContext 
+    from cdm.utilities import ResolveOptions, VisitCallback
+    from cdm.resolvedmodel import ResolvedAttributeSetBuilder, ResolvedTrait, ResolvedTraitSet, ResolvedTraitSetBuilder
 
 
-class CdmTraitReference(CdmObjectReference):
+class CdmTraitReference(CdmTraitReferenceBase):
     def __init__(self, ctx: 'CdmCorpusContext', trait: Union[str, 'CdmTraitDefinition'], simple_reference: bool) -> None:
         super().__init__(ctx, trait, simple_reference)
 
         # true if the trait was generated from a property and false it was directly loaded.
         self.is_from_property = False
+
+        # Gets or sets a reference to a trait used to describe the 'verb' explaining how the trait's meaning should be applied to the 
+        # object that holds this traitReference. This optional property can override the meaning of any defaultVerb that could be part of the 
+        # referenced trait's definition
+        self.verb = None # type: Optional[CdmTraitReference]
 
         # Internal
         self._resolved_arguments = False
@@ -44,14 +51,20 @@ class CdmTraitReference(CdmObjectReference):
 
     def _copy_ref_object(self, res_opt: 'ResolveOptions', ref_to: Union[str, 'CdmTraitDefinition'], simple_reference: bool, host: Optional['CdmObjectReference'] = None) -> 'CdmObjectReference':
         if not host:
-            copy = CdmTraitReference(self.ctx, ref_to, bool(self.arguments))
+            copy = CdmTraitReference(self.ctx, ref_to, simple_reference)
         else:
             copy = host._copy_to_host(self.ctx, ref_to, simple_reference)
             copy.arguments.clear()
 
         if not simple_reference:
-            copy.arguments.extend(self.arguments)
             copy._resolved_arguments = self._resolved_arguments
+
+        for arg in self.arguments:
+            copy.arguments.append(arg.copy(res_opt))
+
+        if self.verb:
+            copy.verb = self.verb.copy(res_opt)
+
         return copy
 
     def _visit_ref(self, path_from: str, pre_children: 'VisitCallback', post_children: 'VisitCallback') -> bool:
@@ -66,7 +79,17 @@ class CdmTraitReference(CdmObjectReference):
                     if element.visit(argPath, pre_children, post_children):
                         result = True
                         break
+        if self.verb:
+            self.verb.owner = self
+            if self.verb.visit('{}/verb/'.format(path_from), pre_children, post_children):
+                return True
+
         return result
+
+    def _get_minimum_semantic_version(self) -> int:
+        if self.verb or self.applied_traits and len(self.applied_traits) > 0:
+            return CdmObject.semantic_version_string_to_number(CdmObject.json_schema_semantic_version_traits_on_traits)
+        return super()._get_minimum_semantic_version()
 
     def fetch_argument_value(self, name: str) -> 'CdmArgumentValue':
         if not self.arguments:
@@ -82,7 +105,7 @@ class CdmTraitReference(CdmObjectReference):
             if not arg_name and len(self.arguments) == 1:
                 return arg.value
 
-    def _fetch_resolved_traits(self, res_opt: 'ResolveOptions') -> 'ResolvedTraitSet':
+    def _fetch_resolved_traits(self, res_opt: Optional['ResolveOptions'] = None) -> 'ResolvedTraitSet':
         from cdm.utilities import SymbolSet
         from .cdm_corpus_def import CdmCorpusDefinition
 
@@ -101,67 +124,55 @@ class CdmTraitReference(CdmObjectReference):
             # never been resolved, it will happen soon, so why not now?
             rts_trait = trait._fetch_resolved_traits(res_opt)
 
-        cache_by_path = True
-        if trait._this_is_known_to_have_parameters is not None:
-            cache_by_path = not trait._this_is_known_to_have_parameters
-
-        cache_tag = ctx.corpus._fetch_definition_cache_tag(res_opt, self, kind, '', cache_by_path, trait.at_corpus_path)
-        rts_result = ctx._cache.get(cache_tag) if cache_tag else None
+        rts_result = None
 
         # store the previous reference symbol set, we will need to add it with
         # children found from the _construct_resolved_traits call
         curr_sym_ref_set = res_opt._symbol_ref_set or SymbolSet()
         res_opt._symbol_ref_set = SymbolSet()
 
-        # if not, then make one and save it
-        if not rts_result:
-            # get the set of resolutions, should just be this one trait
-            if not rts_trait:
-                # store current doc ref set
-                new_doc_ref_set = res_opt._symbol_ref_set
-                res_opt._symbol_ref_set = SymbolSet()
+        # get the set of resolutions, should just be this one trait
+        if not rts_trait:
+            # store current doc ref set
+            new_doc_ref_set = res_opt._symbol_ref_set
+            res_opt._symbol_ref_set = SymbolSet()
 
-                rts_trait = trait._fetch_resolved_traits(res_opt)
+            rts_trait = trait._fetch_resolved_traits(res_opt)
 
-                # bubble up symbol reference set from children
-                if new_doc_ref_set:
-                    new_doc_ref_set._merge(res_opt._symbol_ref_set)
+            # bubble up symbol reference set from children
+            if new_doc_ref_set:
+                new_doc_ref_set._merge(res_opt._symbol_ref_set)
 
-                res_opt._symbol_ref_set = new_doc_ref_set
-            if rts_trait:
-                rts_result = rts_trait.deep_copy()
+            res_opt._symbol_ref_set = new_doc_ref_set
+        if rts_trait:
+            rts_result = rts_trait.deep_copy()
 
-            # now if there are argument for this application, set the values in the array
-            if self.arguments and rts_result:
-                # if never tried to line up arguments with parameters, do that
-                if not self._resolved_arguments:
-                    self._resolved_arguments = True
-                    params = trait._fetch_all_parameters(res_opt)
-                    param_found = None
-                    a_value = None
+        # now if there are argument for this application, set the values in the array
+        if self.arguments and rts_result:
+            # if never tried to line up arguments with parameters, do that
+            if not self._resolved_arguments:
+                self._resolved_arguments = True
 
-                    for index, argument in enumerate(self.arguments):
-                        param_found = params.resolve_parameter(index, argument.get_name())
-                        argument._resolved_parameter = param_found
-                        a_value = argument.value
-                        a_value = ctx.corpus._const_type_check(res_opt, self.in_document, param_found, a_value)
-                        argument.value = a_value
+                params = trait._fetch_all_parameters(res_opt)
 
-                for argument in self.arguments:
-                    rts_result.set_parameter_value_from_argument(trait, argument)
+                for argument_index, argument in enumerate(self.arguments):
+                    param_found = params.resolve_parameter(argument_index, argument.get_name())
+                    argument._resolved_parameter = param_found
+                    argument.value = param_found._const_type_check(res_opt, self.in_document, argument.value)
 
-            # register set of possible symbols
-            ctx.corpus._register_definition_reference_symbols(self.fetch_object_definition(res_opt), kind, res_opt._symbol_ref_set)
+            for argument in self.arguments:
+                rts_result.set_parameter_value_from_argument(trait, argument)
 
-            # get the new cache tag now that we have the list of docs
-            cache_tag = ctx.corpus._fetch_definition_cache_tag(res_opt, self, kind, '', cache_by_path, trait.at_corpus_path)
-            if cache_tag:
-                ctx._cache[cache_tag] = rts_result
-        else:
-            # cache was found
-            # get the SymbolSet for this cached object
-            key = CdmCorpusDefinition._fetch_cache_key_from_object(self, kind)
-            res_opt._symbol_ref_set = ctx.corpus._definition_reference_symbols.get(key)
+        # if an explicit verb is set, remember this. don't resolve that verb trait, cuz that sounds nuts.
+        if self.verb:
+            rts_result.set_explicit_verb(trait, self.verb)
+
+        #if a collection of meta traits exist, save on the resolved but don't resolve these. again, nuts
+        if self.applied_traits:
+            rts_result.set_meta_traits(trait, self.applied_traits)
+
+        # register set of possible symbols
+        ctx.corpus._register_definition_reference_symbols(self.fetch_object_definition(res_opt), kind, res_opt._symbol_ref_set)
 
         # merge child document set with current
         curr_sym_ref_set._merge(res_opt._symbol_ref_set)
@@ -173,7 +184,20 @@ class CdmTraitReference(CdmObjectReference):
         final_args = {}  # type: Dict[str, Any]
         # get resolved traits does all the work, just clean up the answers
         rts = self._fetch_resolved_traits(res_opt)  # type: ResolvedTraitSet
-        if rts is None:
+        if rts is None or rts.size != 1:
+            # well didn't get the traits. maybe imports are missing or maybe things are just not defined yet.
+            # this function will try to fake up some answers then from the arguments that are set on this reference only
+            if self.arguments:
+                un_named_count = 0
+                for arg in self.arguments:
+                    # if no arg name given, use the position in the list.
+                    arg_name = arg.name
+                    if not arg_name or arg_name.isspace():
+                        arg_name = str(un_named_count)
+                    final_args[arg_name] = arg.value
+                    un_named_count += 1
+                return final_args
+
             return None
 
         # there is only one resolved trait

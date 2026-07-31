@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-import { configObjectType, StorageAdapter } from './StorageAdapter';
+import { CdmCorpusContext, CdmFileMetadata } from '../internal';
 
 /**
   * The CDM base class for an adapter object that can read and write documents from a data source.
@@ -9,7 +9,12 @@ import { configObjectType, StorageAdapter } from './StorageAdapter';
   * to manually copy data to the location where the Object Model is running. By deriving from this 
   * this class, users can to create their own adapter if needed.
  */
-export abstract class StorageAdapterBase implements StorageAdapter {
+export abstract class StorageAdapterBase {
+    /**
+     * The CDM corpus context, gives information for the logger.
+     */
+    public ctx: CdmCorpusContext;
+
     /**
      * The location hint, gives a hint to the reader app about the
      * location where the adapter implementation (Nuget, NPM...) can be obtained.
@@ -63,13 +68,38 @@ export abstract class StorageAdapterBase implements StorageAdapter {
     public async computeLastModifiedTimeAsync(corpusPath: string): Promise<Date> {
         return new Date();
     }
+    
+    /**
+     * Returns the file metadata info about the specified document
+     */
+    public async fetchFileMetadataAsync(corpusPath: string): Promise<CdmFileMetadata> {
+        return undefined;
+    }
 
     /**
+     * @deprecated
+     * Deprecated in favor of fetchAllFilesMetadataAsync
      * Returns a list corpus paths to all files and folders at or under the
      * provided corpus path to a folder
      */
     public async fetchAllFilesAsync(folderCorpusPath: string): Promise<string[]> {
         return undefined;
+    }
+
+    /**
+     * Returns a list of dictionaries containing metadata about data partitions
+     */
+    public async fetchAllFilesMetadataAsync(folderCorpusPath: string): Promise<Map<string, CdmFileMetadata>> {
+        const allFiles: string[] = await this.fetchAllFilesAsync(folderCorpusPath);
+
+        const filesMetadata: Map<string, CdmFileMetadata> = new Map<string, CdmFileMetadata>();
+        if (allFiles) {
+            for (const file of allFiles) {
+                filesMetadata.set(file, undefined);
+            }
+        }
+
+        return filesMetadata;
     }
 
     /**
@@ -80,7 +110,7 @@ export abstract class StorageAdapterBase implements StorageAdapter {
 
     /**
      * Constructs the config.
-     * Reeturns the object, representing the constructed config for that adapter.
+     * Returns the object, representing the constructed config for that adapter.
      */
     public fetchConfig(): string {
         return "{}";
@@ -148,4 +178,25 @@ export class StorageAdapterCacheContext {
     public dispose(): void {
         this.disposeFunc(this);
     }
+}
+
+export interface configObjectType {
+    type?: string;
+    root?: string;
+    appId?: string;
+    defaultNamespace?: string;
+    adapters?: any[];
+    hosts?: any[];
+    locationHint?: string;
+    config?: configObjectType;
+    tenant?: string;
+    clientId?: string;
+    hostname?: string;
+    sharedKey?: string;
+    secret?: string;
+    timeout?: number;
+    maximumTimeout?: number;
+    numberOfRetries?: number;
+    sasToken?: string;
+    endpoint?: string;
 }

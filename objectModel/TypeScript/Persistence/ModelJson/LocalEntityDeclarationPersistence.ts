@@ -11,11 +11,13 @@ import {
     CdmLocalEntityDeclarationDefinition,
     CdmManifestDefinition,
     cdmObjectType,
+    cdmLogCode,
     CdmTraitDefinition,
     CdmTraitReference,
     copyOptions,
     resolveOptions,
-    traitToPropertyMap
+    traitToPropertyMap,
+    CdmConstants
 } from '../../internal';
 import { Logger } from '../../Utilities/Logging/Logger';
 import * as timeUtils from '../../Utilities/timeUtils';
@@ -23,6 +25,8 @@ import * as extensionHelper from './ExtensionHelper';
 import { Entity, LocalEntity, Partition } from './types';
 
 export class LocalEntityDeclarationPersistence {
+    private static TAG: string = LocalEntityDeclarationPersistence.name;
+
     public static async fromData(
         ctx: CdmCorpusContext,
         documentFolder: CdmFolderDefinition,
@@ -32,6 +36,7 @@ export class LocalEntityDeclarationPersistence {
     ): Promise<CdmLocalEntityDeclarationDefinition> {
         const localEntityDec: CdmLocalEntityDeclarationDefinition =
             ctx.corpus.MakeObject(cdmObjectType.localEntityDeclarationDef, dataObj.name);
+        localEntityDec.virtualLocation = documentFolder.folderPath + CdmConstants.modelJsonExtension;
 
         const localExtensionTraitDefList: CdmTraitDefinition[] = [];
         const entityDoc: CdmDocumentDefinition = await ModelJson.DocumentPersistence.fromData(
@@ -41,20 +46,10 @@ export class LocalEntityDeclarationPersistence {
             localExtensionTraitDefList
         );
 
-        if (entityDoc === undefined) {
-            Logger.error(
-                LocalEntityDeclarationPersistence.name,
-                ctx,
-                'There was an error while trying to fetch the entity doc from local entity declaration persistence.'
-            );
-
-            return undefined;
-        }
-
         documentFolder.documents.push(entityDoc);
 
         // Entity schema path is the path to the doc containing the entity definition.
-        localEntityDec.entityPath = ctx.corpus.storage.createRelativeCorpusPath(`${entityDoc.atCorpusPath}/${dataObj.name}`, manifest);
+        localEntityDec.entityPath = ctx.corpus.storage.createRelativeCorpusPath(`${entityDoc.atCorpusPath}/${dataObj.name}`, documentFolder);
 
         localEntityDec.explanation = dataObj.description;
 
@@ -97,12 +92,7 @@ export class LocalEntityDeclarationPersistence {
                 if (cdmPartition !== undefined) {
                     localEntityDec.dataPartitions.push(cdmPartition);
                 } else {
-                    Logger.error(
-                        LocalEntityDeclarationPersistence.name,
-                        ctx,
-                        'There was an error while trying to convert model.json partition to cdm local data partition.'
-                    );
-
+                    Logger.error(ctx, this.TAG, this.fromData.name, undefined, cdmLogCode.ErrPersistModelJsonDocConversionError);
                     return undefined;
                 }
             }
@@ -154,14 +144,6 @@ export class LocalEntityDeclarationPersistence {
                     const partition: Partition = await ModelJson.DataPartitionPersistence.toData(element, resOpt, options);
                     if (partition !== undefined) {
                         localEntity.partitions.push(partition);
-                    } else {
-                        Logger.error(
-                            LocalEntityDeclarationPersistence.name,
-                            instance.ctx,
-                            'There was an error while trying to convert cdm data partition to model.json partition.'
-                        );
-
-                        return undefined;
                     }
                 }
             }

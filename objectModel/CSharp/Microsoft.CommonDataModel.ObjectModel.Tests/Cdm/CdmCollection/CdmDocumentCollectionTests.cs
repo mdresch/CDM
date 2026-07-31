@@ -14,7 +14,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
         [TestMethod]
         public void TestDocumentCollectionAdd()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Root\\Path");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
             var folder = new CdmFolderDefinition(manifest.Ctx, "Folder");
             folder.Corpus = manifest.Ctx.Corpus;
             folder.FolderPath = "FolderPath/";
@@ -30,12 +30,15 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
             Assert.AreEqual(folder, document.Owner);
             Assert.AreEqual("Namespace", document.Namespace);
             Assert.IsTrue(document.NeedsIndexing);
+
+            var doc = folder.Documents.Add(document);
+            Assert.IsNull(doc);
         }
 
         [TestMethod]
         public void TestDocumentCollectionInsert()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Root\\Path");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
             var folder = new CdmFolderDefinition(manifest.Ctx, "Folder");
             folder.InDocument = manifest;
             folder.Corpus = manifest.Ctx.Corpus;
@@ -62,12 +65,16 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
             Assert.AreEqual(folder, document.Owner);
             Assert.IsTrue(folder.DocumentLookup.ContainsKey(document.Name));
             Assert.IsTrue(manifest.Ctx.Corpus.documentLibrary.Contains(Tuple.Create(folder, document)));
+
+            // reinsert same name doc
+            folder.Documents.Insert(2, document);
+            Assert.AreEqual(3, folder.Documents.Count);
         }
 
         [TestMethod]
         public void TestDocumentCollectionAddWithDocumentName()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Root\\Path");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
             var folder = new CdmFolderDefinition(manifest.Ctx, "Folder");
             folder.Corpus = manifest.Ctx.Corpus;
             folder.FolderPath = "FolderPath/";
@@ -88,7 +95,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
         [TestMethod]
         public void TestDocumentCollectionAddRange()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Root\\Path");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
             var folder = new CdmFolderDefinition(manifest.Ctx, "Folder");
             folder.Corpus = manifest.Ctx.Corpus;
             folder.FolderPath = "FolderPath/";
@@ -121,7 +128,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
         [TestMethod]
         public void TestDocumentCollectionRemove()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Root\\Path");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
             var folder = new CdmFolderDefinition(manifest.Ctx, "Folder");
             folder.Corpus = manifest.Ctx.Corpus;
             folder.FolderPath = "FolderPath/";
@@ -162,7 +169,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
         [TestMethod]
         public void TestDocumentCollectionRemoveAt()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Root\\Path");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
             var folder = new CdmFolderDefinition(manifest.Ctx, "Folder");
             folder.Corpus = manifest.Ctx.Corpus;
             folder.FolderPath = "FolderPath/";
@@ -200,7 +207,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
         [TestMethod]
         public void TestDocumentCollectionClear()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Root\\Path");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
             var folder = new CdmFolderDefinition(manifest.Ctx, "Folder");
             folder.Corpus = manifest.Ctx.Corpus;
             folder.FolderPath = "FolderPath/";

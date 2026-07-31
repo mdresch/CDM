@@ -4,8 +4,10 @@
 import {
     ArgumentValue,
     CdmArgumentDefinition,
-    CdmObjectBase,
+    CdmParameterDefinition,
     CdmTraitDefinition,
+    CdmTraitReference,
+    CdmTraitReferenceBase,
     ParameterCollection,
     ParameterValue,
     ResolvedTrait,
@@ -50,7 +52,7 @@ export class ResolvedTraitSet {
     constructor(resOpt: resolveOptions) {
         // let bodyCode = () =>
         {
-            this.resOpt = resOpt.copy();
+            this.resOpt = resOpt;
             this.set = [];
             this.lookupByTrait = new Map<CdmTraitDefinition, ResolvedTrait>();
             this.hasElevated = false;
@@ -76,8 +78,10 @@ export class ResolvedTraitSet {
             if (traitSetResult.lookupByTrait.has(trait)) {
                 let rtOld: ResolvedTrait = traitSetResult.lookupByTrait.get(trait);
                 let avOld: ArgumentValue[];
+                let wasSetOld: boolean[];
                 if (rtOld.parameterValues) {
                     avOld = rtOld.parameterValues.values;
+                    wasSetOld = rtOld.parameterValues.wasSet;
                 }
                 if (av && avOld) {
                     // the new values take precedence
@@ -88,12 +92,31 @@ export class ResolvedTraitSet {
                                 traitSetResult = traitSetResult.shallowCopyWithException(trait);
                                 rtOld = traitSetResult.lookupByTrait.get(trait);
                                 avOld = rtOld.parameterValues.values;
+                                wasSetOld = rtOld.parameterValues.wasSet;
                                 copyOnWrite = false;
                             }
 
                             avOld[i] = ParameterValue.fetchReplacementValue(this.resOpt, avOld[i], av[i], wasSet[i]);
+                            wasSetOld[i] = (wasSetOld[i] || wasSet[i]);
                         }
                     }
+                }
+                // is an explicit verb given with this reference?
+                if (toMerge.explicitVerb !== undefined) {
+                    if (copyOnWrite) {
+                        traitSetResult = traitSetResult.shallowCopyWithException(trait);
+                        rtOld = traitSetResult.lookupByTrait.get(trait);
+                        copyOnWrite = false;
+                    }
+                    rtOld.explicitVerb = toMerge.explicitVerb;
+                }
+                // are meta traits set on this newer reference?
+                if (toMerge.metaTraits !== undefined && toMerge.metaTraits.length > 0) {
+                    if (copyOnWrite) {
+                        traitSetResult = traitSetResult.shallowCopyWithException(trait);
+                        rtOld = traitSetResult.lookupByTrait.get(trait);
+                    }
+                    rtOld.metaTraits = toMerge.metaTraits.slice(0);
                 }
             } else {
                 if (copyOnWrite) {
@@ -161,16 +184,27 @@ export class ResolvedTraitSet {
         // return p.measure(bodyCode);
     }
 
+    public remove(resOpt: resolveOptions, traitName: string): boolean {
+        const rt: ResolvedTrait = this.find(resOpt, traitName);
+        if (rt !== undefined) {
+            this.lookupByTrait.delete(rt.trait);
+            const index:number = this.set.indexOf(rt);
+            if (index > -1) {
+                this.set.splice(index, 1);
+            }
+            return true;
+        }
+        return false;
+    }
+
     public deepCopy(): ResolvedTraitSet {
         // let bodyCode = () =>
         {
             const copy: ResolvedTraitSet = new ResolvedTraitSet(this.resOpt);
-            const newSet: ResolvedTrait[] = copy.set;
             const l: number = this.set.length;
             for (let i: number = 0; i < l; i++) {
-                let rt: ResolvedTrait = this.set[i];
-                rt = rt.copy();
-                newSet.push(rt);
+                const rt: ResolvedTrait = this.set[i].copy();
+                copy.set.push(rt);
                 copy.lookupByTrait.set(rt.trait, rt);
             }
             copy.hasElevated = this.hasElevated;
@@ -184,14 +218,13 @@ export class ResolvedTraitSet {
         // let bodyCode = () =>
         {
             const copy: ResolvedTraitSet = new ResolvedTraitSet(this.resOpt);
-            const newSet: ResolvedTrait[] = copy.set;
             const l: number = this.set.length;
             for (let i: number = 0; i < l; i++) {
                 let rt: ResolvedTrait = this.set[i];
                 if (rt.trait === just) {
                     rt = rt.copy();
                 }
-                newSet.push(rt);
+                copy.set.push(rt);
                 copy.lookupByTrait.set(rt.trait, rt);
             }
             copy.hasElevated = this.hasElevated;
@@ -206,11 +239,10 @@ export class ResolvedTraitSet {
         {
             const copy: ResolvedTraitSet = new ResolvedTraitSet(this.resOpt);
             if (this.set) {
-                const newSet: ResolvedTrait[] = copy.set;
                 const l: number = this.set.length;
                 for (let i: number = 0; i < l; i++) {
                     const rt: ResolvedTrait = this.set[i];
-                    newSet.push(rt);
+                    copy.set.push(rt);
                     copy.lookupByTrait.set(rt.trait, rt);
                 }
             }
@@ -238,6 +270,15 @@ export class ResolvedTraitSet {
         // return p.measure(bodyCode);
     }
 
+    public setExplicitVerb(trait: CdmTraitDefinition, verb: CdmTraitReference): void {
+        let resTrait: ResolvedTrait = this.get(trait);
+        resTrait.explicitVerb = verb;
+    }
+    public setMetaTraits(trait: CdmTraitDefinition, metaTraits: Array<CdmTraitReferenceBase>): void {
+        let resTrait: ResolvedTrait = this.get(trait);
+        resTrait.metaTraits = metaTraits.slice(0);
+    }
+
     public setParameterValueFromArgument(trait: CdmTraitDefinition, arg: CdmArgumentDefinition): void {
         // let bodyCode = () =>
         {
@@ -246,9 +287,16 @@ export class ResolvedTraitSet {
                 const av: ArgumentValue[] = resTrait.parameterValues.values;
                 const newVal: ArgumentValue = arg.getValue();
                 // get the value index from the parameter collection given the parameter that this argument is setting
-                const iParam: number = resTrait.parameterValues.indexOf(arg.getParameterDef());
-                av[iParam] = ParameterValue.fetchReplacementValue(this.resOpt, av[iParam], newVal, true);
-                resTrait.parameterValues.wasSet[iParam] = true;
+                let paramDef: CdmParameterDefinition = arg.getParameterDef();
+                if (paramDef)
+                {
+                    resTrait.parameterValues.setParameterValue(this.resOpt, paramDef.getName(), newVal);
+                }
+                else
+                {
+                    // debug
+                    paramDef = arg.getParameterDef();
+                }
             }
         }
         // return p.measure(bodyCode);

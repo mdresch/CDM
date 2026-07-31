@@ -4,9 +4,10 @@
 from typing import Optional
 
 from cdm.enums import CdmObjectType, CdmAttributeContextType
-from cdm.objectmodel import CdmCorpusContext, CdmAttributeContext
+from cdm.objectmodel import CdmCorpusContext, CdmAttributeContext, CdmCollection, CdmTraitGroupReference
 from cdm.persistence import PersistenceLayer
 from cdm.utilities import CopyOptions, ResolveOptions, copy_data_utils
+from cdm.utilities.string_utils import StringUtils
 
 from . import utils
 from .attribute_context_reference_persistence import AttributeContextReferencePersistence
@@ -21,6 +22,8 @@ map_type_name_to_enum = {
     'entityReferenceExtends': CdmAttributeContextType.ENTITY_REFERENCE_EXTENDS,
     'attributeGroup': CdmAttributeContextType.ATTRIBUTE_GROUP,
     'attributeDefinition': CdmAttributeContextType.ATTRIBUTE_DEFINITION,
+    'attributeExcluded': CdmAttributeContextType.ATTRIBUTE_EXCLUDED,
+    'addedAttributeNewArtifact': CdmAttributeContextType.ADDED_ATTRIBUTE_NEW_ARTIFACT,
     'addedAttributeSupporting': CdmAttributeContextType.ADDED_ATTRIBUTE_SUPPORTING,
     'addedAttributeIdentity': CdmAttributeContextType.ADDED_ATTRIBUTE_IDENTITY,
     'addedAttributeExpansionTotal': CdmAttributeContextType.ADDED_ATTRIBUTE_EXPANSION_TOTAL,
@@ -39,7 +42,10 @@ map_type_name_to_enum = {
     'operationRenameAttributes': CdmAttributeContextType.OPERATION_RENAME_ATTRIBUTES,
     'operationReplaceAsForeignKey': CdmAttributeContextType.OPERATION_REPLACE_AS_FOREIGN_KEY,
     'operationIncludeAttributes': CdmAttributeContextType.OPERATION_INCLUDE_ATTRIBUTES,
-    'operationAddAttributeGroup': CdmAttributeContextType.OPERATION_ADD_ATTRIBUTE_GROUP
+    'operationAddAttributeGroup': CdmAttributeContextType.OPERATION_ADD_ATTRIBUTE_GROUP,
+    'operationAlterTraits': CdmAttributeContextType.OPERATION_ALTER_TRAITS,
+    'operationAddArtifactAttribute': CdmAttributeContextType.OPERATION_ADD_ARTIFACT_ATTRIBUTE,
+    'unknown': CdmAttributeContextType.UNKNOWN
 }
 
 map_enum_to_type_name = {
@@ -47,6 +53,8 @@ map_enum_to_type_name = {
     CdmAttributeContextType.ENTITY_REFERENCE_EXTENDS: 'entityReferenceExtends',
     CdmAttributeContextType.ATTRIBUTE_GROUP: 'attributeGroup',
     CdmAttributeContextType.ATTRIBUTE_DEFINITION: 'attributeDefinition',
+    CdmAttributeContextType.ATTRIBUTE_EXCLUDED: 'attributeExcluded',
+    CdmAttributeContextType.ADDED_ATTRIBUTE_NEW_ARTIFACT: 'addedAttributeNewArtifact',
     CdmAttributeContextType.ADDED_ATTRIBUTE_SUPPORTING: 'addedAttributeSupporting',
     CdmAttributeContextType.ADDED_ATTRIBUTE_IDENTITY: 'addedAttributeIdentity',
     CdmAttributeContextType.ADDED_ATTRIBUTE_EXPANSION_TOTAL: 'addedAttributeExpansionTotal',
@@ -65,7 +73,10 @@ map_enum_to_type_name = {
     CdmAttributeContextType.OPERATION_RENAME_ATTRIBUTES: 'operationRenameAttributes',
     CdmAttributeContextType.OPERATION_REPLACE_AS_FOREIGN_KEY: 'operationReplaceAsForeignKey',
     CdmAttributeContextType.OPERATION_INCLUDE_ATTRIBUTES: 'operationIncludeAttributes',
-    CdmAttributeContextType.OPERATION_ADD_ATTRIBUTE_GROUP: 'operationAddAttributeGroup'
+    CdmAttributeContextType.OPERATION_ADD_ATTRIBUTE_GROUP: 'operationAddAttributeGroup',
+    CdmAttributeContextType.OPERATION_ALTER_TRAITS: 'operationAlterTraits',
+    CdmAttributeContextType.OPERATION_ADD_ARTIFACT_ATTRIBUTE: 'operationAddArtifactAttribute',
+    CdmAttributeContextType.UNKNOWN: 'unknown'
 }
 
 
@@ -76,29 +87,34 @@ class AttributeContextPersistence:
             return None
 
         attribute_context = ctx.corpus.make_object(CdmObjectType.ATTRIBUTE_CONTEXT_DEF, data.name)
-        attribute_context.type = map_type_name_to_enum[data.type]
+        # TEMPORARY CODE
+        temp = map_type_name_to_enum[data.type]
+        attribute_context.type = temp
 
         if data.get('parent'):
             attribute_context.parent = AttributeContextReferencePersistence.from_data(ctx, data.get('parent'))
 
-        if data.get('explanation'):
-            attribute_context.explanation = data.get('explanation')
+        if not StringUtils.is_blank_by_cdm_standard(data.explanation):
+            attribute_context.explanation = data.explanation
 
         if data.get('definition'):
             if attribute_context.type == CdmAttributeContextType.ENTITY or attribute_context.type == CdmAttributeContextType.ENTITY_REFERENCE_EXTENDS:
                 attribute_context.definition = EntityReferencePersistence.from_data(ctx, data.definition)
             elif attribute_context.type == CdmAttributeContextType.ATTRIBUTE_GROUP:
                 attribute_context.definition = AttributeGroupReferencePersistence.from_data(ctx, data.definition)
-            elif attribute_context.type == CdmAttributeContextType.ADDED_ATTRIBUTE_SUPPORTING \
+            elif attribute_context.type == CdmAttributeContextType.ADDED_ATTRIBUTE_NEW_ARTIFACT \
+                    or attribute_context.type == CdmAttributeContextType.ADDED_ATTRIBUTE_SUPPORTING \
                     or attribute_context.type == CdmAttributeContextType.ADDED_ATTRIBUTE_IDENTITY \
+                    or attribute_context.type == CdmAttributeContextType.ADDED_ATTRIBUTE_NEW_ARTIFACT \
                     or attribute_context.type == CdmAttributeContextType.ADDED_ATTRIBUTE_EXPANSION_TOTAL \
                     or attribute_context.type == CdmAttributeContextType.ADDED_ATTRIBUTE_SELECTED_TYPE \
-                    or attribute_context.type == CdmAttributeContextType.ATTRIBUTE_DEFINITION:
+                    or attribute_context.type == CdmAttributeContextType.ATTRIBUTE_DEFINITION \
+                    or attribute_context.type == CdmAttributeContextType.ATTRIBUTE_EXCLUDED:
                 attribute_context.definition = AttributeReferencePersistence.from_data(ctx, data.definition)
 
         # I know the trait collection names look wrong. but I wanted to use the def baseclass
-        applied_traits = utils.create_trait_reference_array(ctx, data.get('appliedTraits'))
-        attribute_context.exhibits_traits.extend(applied_traits)
+        utils.add_list_to_cdm_collection(attribute_context.exhibits_traits,
+                                         utils.create_trait_reference_array(ctx, data.get('appliedTraits')))
 
         if data.get('contents'):
             if attribute_context.contents is None:
@@ -110,21 +126,32 @@ class AttributeContextPersistence:
                 else:
                     attribute_context.contents.append(AttributeContextPersistence.from_data(ctx, elem))
 
+        if data.get('lineage'):
+            if attribute_context.lineage is None:
+                attribute_context.lineage = CdmCollection(ctx, attribute_context, CdmObjectType.ATTRIBUTE_CONTEXT_REF)
+
+            for elem in data.lineage:
+                attribute_context.lineage.append(AttributeContextReferencePersistence.from_data(ctx, elem))
+
         return attribute_context
 
     @staticmethod
     def to_data(instance: CdmAttributeContext, res_opt: ResolveOptions, options: CopyOptions) -> AttributeContext:
         result = AttributeContext()
 
-        exhibits_traits = [trait for trait in instance.exhibits_traits if not trait.is_from_property]
+        exhibits_traits = [trait for trait in instance.exhibits_traits
+                           if isinstance(trait, CdmTraitGroupReference) or not trait.is_from_property]
 
         result.explanation = instance.explanation
         result.name = instance.name
         result.type = map_enum_to_type_name[instance.type]
         result.parent = AttributeContextReferencePersistence.to_data(instance.parent, res_opt, options) if instance.parent is not None else None
-        result.definition = PersistenceLayer.to_data(instance.definition, res_opt, options, PersistenceLayer.CDM_FOLDER) if instance.definition is not None else None
+        definition = PersistenceLayer.to_data(instance.definition, res_opt, options,
+                                              PersistenceLayer.CDM_FOLDER) if instance.definition is not None else None
+        result.definition = definition if isinstance(definition, str) else None
         # I know the trait collection names look wrong. but I wanted to use the def baseclass
         result.appliedTraits = copy_data_utils._array_copy_data(res_opt, exhibits_traits, options)
         result.contents = copy_data_utils._array_copy_data(res_opt, instance.contents, options)
+        result.lineage = copy_data_utils._array_copy_data(res_opt, instance.lineage, options)
 
         return result

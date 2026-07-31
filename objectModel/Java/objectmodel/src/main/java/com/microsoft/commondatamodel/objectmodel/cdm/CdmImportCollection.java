@@ -20,6 +20,24 @@ public class CdmImportCollection extends CdmCollection<CdmImport> {
     super(ctx, owner, CdmObjectType.Import);
   }
 
+  public CdmImport item(final String corpusPath, final String moniker, final boolean checkMoniker) {
+    if (checkMoniker) {
+      return this.allItems.stream().filter((x) -> corpusPath.equals(x.getCorpusPath())
+              && ((x.getMoniker() == null && moniker == null) || (x.getMoniker() != null && x.getMoniker().equals(moniker)))).findFirst().orElse(null);
+    } else {
+      return this.allItems.stream().filter((x) -> corpusPath.equals(x.getCorpusPath())).findFirst().orElse(null);
+    }
+  }
+
+  public CdmImport item(final String corpusPath, final String moniker) {
+    return this.item(corpusPath, moniker, true);
+  }
+
+  @Override
+  public CdmImport item(final String corpusPath) {
+    return this.item(corpusPath, null);
+  }
+
   @Override
   public CdmDocumentDefinition getOwner() {
     return (CdmDocumentDefinition) super.getOwner();
@@ -62,6 +80,17 @@ public class CdmImportCollection extends CdmCollection<CdmImport> {
     final CdmImport cdmImport = this.add(corpusPath);
     cdmImport.setMoniker(moniker);
     return cdmImport;
+  }
+
+  public CdmImport add(final CdmImport currObject) {
+    if (currObject.previousOwner != null) {
+      String absolutePath = this.getCtx().getCorpus().getStorage().createAbsoluteCorpusPath(currObject.getCorpusPath(), currObject.previousOwner);
+
+      // Need to make the import path relative to the resolved manifest instead of the original manifest.
+      currObject.setCorpusPath(this.getCtx().getCorpus().getStorage().createRelativeCorpusPath(absolutePath, this.getOwner()));
+    }
+
+    return super.add(currObject);
   }
 
   public void addAll(final List<CdmImport> importList) {

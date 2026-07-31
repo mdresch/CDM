@@ -34,14 +34,14 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
     ]
 
     # The path between test_data_path and test_name.
-    tests_subpath = os.path.join('Cdm', 'Projection', 'TestProjectionAddSupportingAttribute')
+    tests_subpath = os.path.join('Cdm', 'Projection', 'ProjectionAddSupportingAttributeTest')
 
     @async_test
     async def test_combine_ops_proj(self):
         """AddSupportingAttribute with replaceAsForeignKey operation in the same projection"""
         test_name = 'test_combine_ops_proj'
         entity_name = 'NewPerson'
-        corpus = ProjectionTestUtils.get_corpus(test_name, self.tests_subpath)  # type: CdmCorpusDefinition
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
 
         for res_opt in self.res_opts_combinations:
             await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
@@ -64,9 +64,9 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
     @async_test
     async def test_conditional_proj(self):
         """Test AddAttributeGroup operation with a 'referenceOnly' and 'virtual' condition"""
-        test_name = 'TestConditionalProj'
+        test_name = 'test_conditional_proj'
         entity_name = 'NewPerson'
-        corpus = ProjectionTestUtils.get_corpus(test_name, self.tests_subpath)  # type: CdmCorpusDefinition
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
 
         for res_opt in self.res_opts_combinations:
             await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
@@ -99,9 +99,9 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
     @async_test
     async def test_entity_attribute(self):
         """Test resolving an entity attribute using resolution guidance"""
-        test_name = 'TestEntityAttribute'
+        test_name = 'test_entity_attribute'
         entity_name = 'NewPerson'
-        corpus = ProjectionTestUtils.get_corpus(test_name, self.tests_subpath)  # type: CdmCorpusDefinition
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
 
         for res_opt in self.res_opts_combinations:
             await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
@@ -131,10 +131,10 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
 
     @async_test
     async def test_entity_attribute_proj(self):
-        """Test resolving an entity attribute with add supporint attribute operation"""
-        test_name = 'TestEntityAttributeProj'
+        """Test resolving an entity attribute with add supporting attribute operation"""
+        test_name = 'test_entity_attribute_proj'
         entity_name = 'NewPerson'
-        corpus = ProjectionTestUtils.get_corpus(test_name, self.tests_subpath)  # type: CdmCorpusDefinition
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
 
         for res_opt in self.res_opts_combinations:
             await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
@@ -155,9 +155,9 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
     @async_test
     async def test_extends_entity(self):
         """addSupportingAttribute on an entity definition using resolution guidance"""
-        test_name = 'TestExtendsEntity'
+        test_name = 'test_extends_entity'
         entity_name = 'NewPerson'
-        corpus = ProjectionTestUtils.get_corpus(test_name, self.tests_subpath)  # type: CdmCorpusDefinition
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
         self.maxDiff = None
 
         for res_opt in self.res_opts_combinations:
@@ -180,9 +180,9 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
     @async_test
     async def test_extends_entity_proj(self):
         """addSupportingAttribute on an entity definition"""
-        test_name = 'TestExtendsEntityProj'
+        test_name = 'test_extends_entity_proj'
         entity_name = 'NewPerson'
-        corpus = ProjectionTestUtils.get_corpus(test_name, self.tests_subpath)  # type: CdmCorpusDefinition
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
 
         for res_opt in self.res_opts_combinations:
             await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
@@ -204,9 +204,9 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
     @async_test
     async def test_nested_proj(self):
         """Nested replaceAsForeignKey with addSupporingAttribute"""
-        test_name = 'TestNestedProj'
+        test_name = 'test_nested_proj'
         entity_name = 'NewPerson'
-        corpus = ProjectionTestUtils.get_corpus(test_name, self.tests_subpath)  # type: CdmCorpusDefinition
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
 
         for res_opt in self.res_opts_combinations:
             await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
@@ -219,13 +219,33 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
         self.assertEqual('personId', resolved_entity.attributes[0].name)
         self.assertEqual('PersonInfo_display', resolved_entity.attributes[1].name)
         self.validate_in_support_of_attribute(resolved_entity.attributes[1], 'personId')
+    
+    @async_test
+    async def test_nested_type_attribute_proj(self):
+        """Test resolving a type attribute with a nested add supporting attribute operation"""
+        test_name = 'test_nested_t_a_proj'
+        entity_name = 'NewPerson'
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
+
+        for res_opt in self.res_opts_combinations:
+            await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
+
+        entity = await corpus.fetch_object_async('local:/{0}.cdm.json/{0}'.format(entity_name))  # type: CdmEntityDefinition
+        resolved_entity = await ProjectionTestUtils.get_resolved_entity(corpus, entity, ['referenceOnly'])  # type: CdmEntityDefinition
+
+        # Original set of attributes: ["PersonInfo"]
+        self.assertEqual(2, len(resolved_entity.attributes))
+        self.assertEqual('name', resolved_entity.attributes[0].name)
+        supporting_attribute = resolved_entity.attributes[1]  # type: CdmTypeAttributeDefinition
+        self.assertEqual('name_display', supporting_attribute.name)
+        self.validate_in_support_of_attribute(supporting_attribute, 'name', False)
 
     @async_test
     async def test_type_attribute(self):
         """Test resolving a type attribute using resolution guidance"""
-        test_name = 'TestTypeAttribute'
+        test_name = 'test_type_attribute'
         entity_name = 'NewPerson'
-        corpus = ProjectionTestUtils.get_corpus(test_name, self.tests_subpath)  # type: CdmCorpusDefinition
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
 
         for res_opt in self.res_opts_combinations:
             await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
@@ -233,7 +253,27 @@ class ProjectionAddSupportingAttributeTest(unittest.TestCase):
         entity = await corpus.fetch_object_async('local:/{0}.cdm.json/{0}'.format(entity_name))  # type: CdmEntityDefinition
         resolved_entity = await ProjectionTestUtils.get_resolved_entity(corpus, entity, ['structured'])  # type: CdmEntityDefinition
 
-        # Original set of attributes: ['name', 'age', 'address', 'phoneNumber', 'email']
+        # Original set of attributes: ["PersonInfo"]
+        self.assertEqual(2, len(resolved_entity.attributes))
+        self.assertEqual('PersonInfo', resolved_entity.attributes[0].name)
+        supporting_attribute = resolved_entity.attributes[1]  # type: CdmTypeAttributeDefinition
+        self.assertEqual('PersonInfo_display', supporting_attribute.name)
+        self.validate_in_support_of_attribute(supporting_attribute, 'PersonInfo', False)
+
+    @async_test
+    async def test_type_attribute_proj(self):
+        """Test resolving a type attribute with an add supporting attribute operation"""
+        test_name = 'test_type_attribute_proj'
+        entity_name = 'NewPerson'
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, test_name)  # type: CdmCorpusDefinition
+
+        for res_opt in self.res_opts_combinations:
+            await ProjectionTestUtils.load_entity_for_resolution_option_and_save(self, corpus, test_name, self.tests_subpath, entity_name, res_opt)
+
+        entity = await corpus.fetch_object_async('local:/{0}.cdm.json/{0}'.format(entity_name))  # type: CdmEntityDefinition
+        resolved_entity = await ProjectionTestUtils.get_resolved_entity(corpus, entity, ['referenceOnly'])  # type: CdmEntityDefinition
+
+        # Original set of attributes: ["PersonInfo"]
         self.assertEqual(2, len(resolved_entity.attributes))
         self.assertEqual('PersonInfo', resolved_entity.attributes[0].name)
         supporting_attribute = resolved_entity.attributes[1]  # type: CdmTypeAttributeDefinition

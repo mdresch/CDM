@@ -1,4 +1,5 @@
 {
+  "documentVersion": "1.4",
   "jsonSchemaSemanticVersion": "1.0.0",
   "imports": [
     {
@@ -47,7 +48,7 @@
           "arguments": [
             {
               "name": "versionNumber",
-              "value": "1.2"
+              "value": "1.4"
             }
           ]
         }
@@ -392,22 +393,26 @@
                               [
                                 "en",
                                 "Text",
-                                "972230000"
+                                "972230000",
+                                "0"
                               ],
                               [
                                 "en",
                                 "Number",
-                                "972230001"
+                                "972230001",
+                                "1"
                               ],
                               [
                                 "en",
                                 "Date",
-                                "972230002"
+                                "972230002",
+                                "2"
                               ],
                               [
                                 "en",
                                 "Option",
-                                "972230003"
+                                "972230003",
+                                "4"
                               ]
                             ]
                           }

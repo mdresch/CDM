@@ -3,14 +3,8 @@
 
 package com.microsoft.commondatamodel.objectmodel.utilities.network;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import com.microsoft.commondatamodel.objectmodel.cdm.CdmCorpusContext;
+import com.microsoft.commondatamodel.objectmodel.utilities.logger.Logger;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -25,6 +19,16 @@ import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
 
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
 /**
  * CDM Http Client is an HTTP client which implements retry logic to execute retries in the case of failed requests.
  * A user can specify API endpoint when creating the client and additional path in the CDM HTTP request.
@@ -32,6 +36,8 @@ import org.apache.http.impl.client.HttpClientBuilder;
  * The client also expects a user to specify callback function which will be used in the case of a failure (4xx or 5xx HTTP standard status codes).
  */
 public class CdmHttpClient {
+    private static final String TAG = CdmHttpClient.class.getSimpleName();
+
     @FunctionalInterface
     public interface Callback {
         Duration apply(CdmHttpResponse response, boolean hasFailed, int retryNumber);
@@ -76,7 +82,8 @@ public class CdmHttpClient {
      */
     @Deprecated
     public CompletableFuture<CdmHttpResponse> sendAsync(final CdmHttpRequest cdmHttpRequest,
-                                                        final Callback callback) {
+                                                        final Callback callback,
+                                                        final CdmCorpusContext ctx) {
         final CompletableFuture<CdmHttpResponse> response = new CompletableFuture<>();
         CompletableFuture.runAsync(() -> {
             //  Merge headers first.
@@ -87,7 +94,7 @@ public class CdmHttpClient {
                 // Wait for all the requests to finish, if the time exceeds maximum timeout throw the CDM timed out exception.
                 TimeLimitedNetworkBlockExecutor.runWithTimeout(() -> {
                     try {
-                        final CdmHttpResponse cdmHttpResponse = sendAsyncHelper(cdmHttpRequest, callback);
+                        final CdmHttpResponse cdmHttpResponse = sendAsyncHelper(cdmHttpRequest, callback, ctx);
                         if (cdmHttpRequest != null) {
                             response.complete(cdmHttpResponse);
                         }
@@ -110,7 +117,8 @@ public class CdmHttpClient {
      * @return A CompletableFuture object, representing the CDM Http response.
      */
     private CdmHttpResponse sendAsyncHelper(final CdmHttpRequest cdmHttpRequest,
-                                            final Callback callback) {
+                                            final Callback callback,
+                                            final CdmCorpusContext ctx) {
         URI fullUri = null;
         try {
             if (this.apiEndpoint != null) {
@@ -132,7 +140,7 @@ public class CdmHttpClient {
 
         // Set timeout.
         final RequestConfig requestConfig = RequestConfig.custom()
-                .setConnectTimeout((int) cdmHttpRequest.getTimeout().toMillis()).build();
+                .setSocketTimeout((int) cdmHttpRequest.getTimeout().toMillis()).build();
         httpRequest.setConfig(requestConfig);
 
         // Some requests might not have any content, so check for it.
@@ -151,8 +159,28 @@ public class CdmHttpClient {
         for (int retryNumber = 0; retryNumber <= cdmHttpRequest.getNumberOfRetries(); retryNumber++) {
             boolean hasFailed = false;
             CdmHttpResponse cdmHttpResponse = null;
+            final Instant startTime = java.time.Instant.now();
             try {
+                if (ctx != null)
+                {
+                    Logger.info(ctx, TAG, "sendAsyncHelper",
+                            null, Logger.format("Sending request {0}, request type: {1}, request url: {2}, retry number: {3}.", cdmHttpRequest.getRequestId(), httpRequest.getMethod(), cdmHttpRequest.stripSasSig(), retryNumber));
+                }
+
                 final HttpResponse response = client.execute(httpRequest);
+
+                if (ctx != null)
+                {
+                    final Instant endTime = java.time.Instant.now();
+                    Logger.info(ctx, TAG, "sendAsyncHelper",
+                            null, Logger.format("Response for request id: {0}, elapsed time: {1} ms, content length: {2}, status code: {3}.",
+                            response.getFirstHeader("x-ms-request-id").getValue(),
+                            Duration.between(startTime, endTime).toMillis(),
+                            response.getEntity() != null ? response.getEntity().getContentLength() : "",
+                            response.getStatusLine() != null ? response.getStatusLine().getStatusCode() : ""
+                            ));
+                }
+
                 if (response != null) {
                     cdmHttpResponse = new CdmHttpResponse(response.getStatusLine().getStatusCode());
                     final HttpEntity responseEntity = response.getEntity();
@@ -173,15 +201,22 @@ public class CdmHttpClient {
                     }
                 }
             } catch (final Exception exception) {
+                final Instant endTime = java.time.Instant.now();
                 hasFailed = true;
+
+                if (exception instanceof ConnectTimeoutException && ctx != null) {
+                    Logger.info(ctx, TAG, "sendAsyncHelper",
+                            null, Logger.format("Request {0} timeout after {1} ms.", cdmHttpRequest.getRequestId(), Duration.between(startTime, endTime).toMillis()));
+                }
 
                 // Only throw an exception if another retry is not expected anymore.
                 if (callback == null || retryNumber == cdmHttpRequest.getNumberOfRetries()) {
                     if (retryNumber != 0) {
                         throw new CdmNumberOfRetriesExceededException();
+                    } else if (exception instanceof ConnectTimeoutException) {
+                        throw new CdmTimedOutException(exception.getMessage());
                     } else {
-                        throw (exception instanceof ConnectTimeoutException) ? new CdmTimedOutException(
-                                exception.getMessage()) : new RuntimeException(exception);
+                        throw new RuntimeException(exception);
                     }
                 }
             }
@@ -213,13 +248,11 @@ public class CdmHttpClient {
                 // CDM Http Response exists, could be successful or bad (e.g. 403/404), it is up to caller to deal with it.
                 if (cdmHttpResponse != null) {
                     return cdmHttpResponse;
+                } else if (retryNumber < cdmHttpRequest.getNumberOfRetries()) {
+                    throw new CdmTimedOutException("Request timeout.");
                 } else {
-                    if (retryNumber == 0) {
-                        return null;
-                    } else {
-                        // If response doesn't exist repeatedly, just throw that the number of retries has exceeded (we don't have any other information).
-                        throw new CdmNumberOfRetriesExceededException();
-                    }
+                    // If response doesn't exist repeatedly, just throw that the number of retries has exceeded (we don't have any other information).
+                    throw new CdmNumberOfRetriesExceededException();
                 }
             }
         }

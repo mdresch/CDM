@@ -67,7 +67,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
                 Value = 123
             };
             argList.Add(argumentDefinition);
-            var valOfArg2 = CdmCollectionHelperFunctions.GenerateManifest("C://Nothing");
+            var valOfArg2 = CdmCollectionHelperFunctions.GenerateManifest();
             argumentDefinition = new CdmArgumentDefinition(trait.Ctx, null)
             {
                 Name = "Arg2",
@@ -80,10 +80,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
             Assert.AreEqual(2, trait.Arguments.Count);
             Assert.IsFalse(trait.ResolvedArguments);
             Assert.AreEqual("Arg1", trait.Arguments[0].Name);
-            Assert.AreEqual(123, trait.Arguments[0].Value);
+            Assert.AreEqual(123, trait.Arguments.Item("Arg1").Value);
             Assert.AreEqual(trait, trait.Arguments[0].Owner);
             Assert.AreEqual("Arg2", trait.Arguments[1].Name);
-            Assert.AreEqual(valOfArg2, trait.Arguments[1].Value);
+            Assert.AreEqual(valOfArg2, trait.Arguments.Item("Arg2").Value);
         }
 
         [TestMethod]
@@ -132,13 +132,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
         [TestMethod]
         public void TestCdmCollectionAddPopulatesInDocumentWithVisit()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Nothing");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
 
             var entityReference = new CdmLocalEntityDeclarationDefinition(manifest.Ctx, "entityName");
 
             var trait = entityReference.ExhibitsTraits.Add("theTrait");
 
-            var argument = trait.Arguments.Add("GreatArgumentName", "GreatValue");
+            var argument = (trait as CdmTraitReference).Arguments.Add("GreatArgumentName", "GreatValue");
 
             manifest.Entities.Add(entityReference);
 
@@ -150,7 +150,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.CdmCollection
 
         private CdmTraitReference GenerateTrait()
         {
-            var manifest = CdmCollectionHelperFunctions.GenerateManifest("C:\\Nothing");
+            var manifest = CdmCollectionHelperFunctions.GenerateManifest();
             return new CdmTraitReference(manifest.Ctx, "traitName", false, false);
         }
     }

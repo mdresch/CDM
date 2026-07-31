@@ -7,32 +7,33 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.microsoft.commondatamodel.objectmodel.utilities.CdmFileMetadata;
 import com.microsoft.commondatamodel.objectmodel.utilities.JMapper;
 import com.microsoft.commondatamodel.objectmodel.utilities.StorageUtils;
 import com.microsoft.commondatamodel.objectmodel.utilities.StringUtils;
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
+import java.io.InputStreamReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Implementation of the storage adapter interface which operates over a local filesystem.
  */
 public class LocalAdapter extends StorageAdapterBase {
-  private static final Logger LOGGER = LoggerFactory.getLogger(LocalAdapter.class);
 
   static final String TYPE = "local";
   private String root;
@@ -80,7 +81,7 @@ public class LocalAdapter extends StorageAdapterBase {
     return CompletableFuture.supplyAsync(() -> {
       final String path = createAdapterPath(corpusPath);
 
-      try (final BufferedReader br = new BufferedReader(new FileReader(path))) {
+      try (final BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(path), StandardCharsets.UTF_8))) {
         final StringBuilder result = new StringBuilder();
         String line;
         while ((line = br.readLine()) != null) {
@@ -111,7 +112,7 @@ public class LocalAdapter extends StorageAdapterBase {
       final File file = new File(path);
 
       try {
-        FileUtils.writeStringToFile(file, data);
+        FileUtils.writeStringToFile(file, data, StandardCharsets.UTF_8);
       } catch (final IOException e) {
         throw new StorageAdapterException("Failed to write file at corpus path " + corpusPath, e);
       }
@@ -165,13 +166,25 @@ public class LocalAdapter extends StorageAdapterBase {
 
   @Override
   public CompletableFuture<OffsetDateTime> computeLastModifiedTimeAsync(final String corpusPath) {
+    final CdmFileMetadata fileMetadata = this.fetchFileMetadataAsync(corpusPath).join();
+
+    if (fileMetadata == null) {
+      return CompletableFuture.completedFuture(null);
+    }
+
+    return CompletableFuture.completedFuture(fileMetadata.getLastModifiedTime());
+  }
+
+  @Override
+  public CompletableFuture<CdmFileMetadata> fetchFileMetadataAsync(final String corpusPath) {
     return CompletableFuture.supplyAsync(() -> {
       final Path adapterPath = Paths.get(this.createAdapterPath(corpusPath));
 
       if (Files.exists(adapterPath)) {
         try {
-          return OffsetDateTime
+          final OffsetDateTime lastTime = OffsetDateTime
                   .ofInstant(Files.getLastModifiedTime(adapterPath).toInstant(), ZoneOffset.UTC);
+          return new CdmFileMetadata(lastTime, Files.size(adapterPath));
         } catch (final IOException e) {
           throw new StorageAdapterException(
                   "Failed to get last modified time of file at adapter path " + corpusPath, e);
@@ -192,25 +205,50 @@ public class LocalAdapter extends StorageAdapterBase {
 
       final File[] content = new File(adapterPath).listFiles();
 
-      if (content != null) {
-        for (final File childPath : content) {
-          final String childCorpusPath = createCorpusPath(childPath.getPath());
-          try {
-            if (dirExistsAsync(childCorpusPath).get()) {
-              final List<String> subFiles = fetchAllFilesAsync(childCorpusPath).get();
-              allFiles.addAll(subFiles);
-            } else {
-              allFiles.add(childCorpusPath);
-            }
-          } catch (final InterruptedException | ExecutionException e) {
-            throw new StorageAdapterException(
-                    "Failed to get all files for folderCorpusPath:" + folderCorpusPath, e);
+      if (content == null) {
+        throw new StorageAdapterException("This abstract pathname does not denote a directory, or if an I/O error occurs.");
+      }
+
+      for (final File childPath : content) {
+        final String childCorpusPath = createCorpusPath(childPath.getPath());
+        try {
+          if (dirExistsAsync(childCorpusPath).get()) {
+            final List<String> subFiles = fetchAllFilesAsync(childCorpusPath).get();
+            allFiles.addAll(subFiles);
+          } else {
+            allFiles.add(childCorpusPath);
           }
+        } catch (final InterruptedException | ExecutionException e) {
+          throw new StorageAdapterException(
+                  "Failed to get all files for folderCorpusPath:" + folderCorpusPath, e);
         }
       }
 
       return allFiles;
     });
+  }
+
+  @Override
+  public CompletableFuture<HashMap<String, CdmFileMetadata>> fetchAllFilesMetadataAsync(final String folderCorpusPath) {
+    HashMap<String, CdmFileMetadata> fileMetadatas = new HashMap<String, CdmFileMetadata>();
+    List<String> fileNames = this.fetchAllFilesAsync(folderCorpusPath).join();
+
+    for (String fileName : fileNames) {
+      Path path = Paths.get(this.createAdapterPath(fileName));
+      if (Files.exists(path)) {
+        try {
+          final OffsetDateTime lastTime = OffsetDateTime
+                  .ofInstant(Files.getLastModifiedTime(path).toInstant(), ZoneOffset.UTC);
+          fileMetadatas.put(fileName, new CdmFileMetadata(lastTime, Files.size(path)));
+        } catch (IOException e) {
+        }
+      }
+      else {
+        fileMetadatas.put(fileName, null);
+      }
+    }
+
+    return CompletableFuture.completedFuture(fileMetadatas);
   }
 
   /**
@@ -260,7 +298,6 @@ public class LocalAdapter extends StorageAdapterBase {
     try {
       return new File(path).getCanonicalPath();
     } catch (Exception E) {
-      LOGGER.error("Unable to parse path '{}'.", path);
       return null;
     }
   }

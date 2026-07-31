@@ -9,6 +9,8 @@ import com.microsoft.commondatamodel.objectmodel.cdm.projections.*;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmObjectType;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmOperationType;
 import com.microsoft.commondatamodel.objectmodel.storage.LocalAdapter;
+import com.microsoft.commondatamodel.objectmodel.utilities.ProjectionTestUtils;
+
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -21,18 +23,14 @@ public class ProjectionObjectModelTest {
     /**
      * The path between TestDataPath and TestName.
      */
-    private static final String TESTS_SUBPATH =
-            new File(new File(
-                    "cdm"),
-                    "projection")
-                    .toString();
+    private static final String TESTS_SUBPATH = new File(new File("Cdm"), "Projection").toString();
 
     /**
      * Basic test to save projection based entities and then try to reload them and validate that the projections were persisted correctly
      */
     @Test
     public void testProjectionUsingObjectModel() throws InterruptedException {
-        CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testProjectionUsingObjectModel", null);
+        CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testProjectionUsingObjectModel");
         corpus.getStorage().mount("local", new LocalAdapter(TestHelper.getActualOutputFolderPath(TESTS_SUBPATH, "testProjectionUsingObjectModel")));
         CdmFolderDefinition localRoot = corpus.getStorage().fetchRootFolder("local");
         CdmManifestDefinition manifestDefault = createDefaultManifest(corpus, localRoot);
@@ -250,17 +248,17 @@ public class ProjectionObjectModelTest {
 
         // AddCountAttribute Operation
         CdmOperationAddCountAttribute addCountAttributeOp = new CdmOperationAddCountAttribute(corpus.getCtx());
-        addCountAttributeOp.setCountAttribute(corpus.makeObject(CdmObjectType.TypeAttributeDef));
+        addCountAttributeOp.setCountAttribute(corpus.makeObject(CdmObjectType.TypeAttributeDef, "countAtt"));
         projection.getOperations().add(addCountAttributeOp);
 
         // AddSupportingAttribute Operation
         CdmOperationAddSupportingAttribute addSupportingAttributeOp = new CdmOperationAddSupportingAttribute(corpus.getCtx());
-        addSupportingAttributeOp.setSupportingAttribute(corpus.makeObject(CdmObjectType.TypeAttributeDef));
+        addSupportingAttributeOp.setSupportingAttribute(corpus.makeObject(CdmObjectType.TypeAttributeDef, "supportingAtt"));
         projection.getOperations().add(addSupportingAttributeOp);
 
         // AddTypeAttribute Operation
         CdmOperationAddTypeAttribute addTypeAttributeOp = new CdmOperationAddTypeAttribute(corpus.getCtx());
-        addTypeAttributeOp.setTypeAttribute(corpus.makeObject(CdmObjectType.TypeAttributeDef));
+        addTypeAttributeOp.setTypeAttribute(corpus.makeObject(CdmObjectType.TypeAttributeDef, "typeAtt"));
         projection.getOperations().add(addTypeAttributeOp);
 
         // ExcludeAttributes Operation
@@ -278,7 +276,7 @@ public class ProjectionObjectModelTest {
         // CombineAttributes Operation
         CdmOperationCombineAttributes combineAttributesOp = new CdmOperationCombineAttributes(corpus.getCtx());
         combineAttributesOp.setSelect(new ArrayList<String>());
-        combineAttributesOp.setMergeInto(corpus.makeObject(CdmObjectType.TypeAttributeDef));
+        combineAttributesOp.setMergeInto(corpus.makeObject(CdmObjectType.TypeAttributeDef, "combineAtt"));
         combineAttributesOp.getSelect().add("testAttribute1");
         projection.getOperations().add(combineAttributesOp);
 

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Cdm
@@ -9,7 +9,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
     using System;
     using System.Collections.Generic;
 
-    public class CdmTraitReference : CdmObjectReferenceBase
+    public class CdmTraitReference : CdmTraitReferenceBase
     {
         /// <summary>
         /// Gets the trait reference's arguments.
@@ -20,6 +20,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// Gets or sets whether the trait was generated (true) from a property or if it was directly loaded (false).
         /// </summary>
         public bool IsFromProperty { get; set; }
+
+        /// <summary>
+        /// Gets or sets a reference to a trait used to describe the 'verb' explaining how the trait's meaning should be applied to the 
+        /// object that holds this traitReference. This optional property can override the meaning of any defaultVerb that could be part of the 
+        /// referenced trait's definition
+        /// </summary>
+        public CdmTraitReference Verb { get; set; }
 
         internal bool ResolvedArguments;
 
@@ -55,7 +62,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 copy.ResolvedArguments = this.ResolvedArguments;
             }
             foreach (var arg in this.Arguments)
-                copy.Arguments.Add(arg);
+            {
+                copy.Arguments.Add(arg.Copy(resOpt) as CdmArgumentDefinition);
+            }
+            copy.Verb = (CdmTraitReference)this.Verb?.Copy(resOpt);
 
             return copy;
         }
@@ -130,7 +140,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             {
                 // custom enumeration of args to force a path onto these things that just might not have a name
                 int lItem = this.Arguments.Count;
-                for (int iItem = 0; iItem < lItem; iItem++) {
+                for (int iItem = 0; iItem < lItem; iItem++)
+                {
                     CdmArgumentDefinition element = this.Arguments[iItem];
                     if (element != null)
                     {
@@ -143,6 +154,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                     }
                 }
             }
+            if (this.Verb != null)
+            {
+                this.Verb.Owner = this;
+                if (this.Verb.Visit(pathFrom + "/verb/", preChildren, postChildren))
+                    return true;
+            }
 
             return result;
         }
@@ -151,6 +168,16 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         {
             return null;
         }
+
+        internal override long GetMinimumSemanticVersion()
+        {
+            if (this.Verb != null || this.AppliedTraits != null && this.AppliedTraits.Count > 0)
+            {
+                return CdmObjectBase.SemanticVersionStringToNumber(CdmDocumentDefinition.JsonSchemaSemanticVersionTraitsOnTraits);
+            }
+            return base.GetMinimumSemanticVersion();
+        }
+
 
         internal override ResolvedTraitSet FetchResolvedTraits(ResolveOptions resOpt = null)
         {
@@ -175,96 +202,70 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 rtsTrait = trait.FetchResolvedTraits(resOpt);
             }
 
-            bool cacheByPath = true;
-            if (trait.ThisIsKnownToHaveParameters != null)
-            {
-                cacheByPath = !((bool)trait.ThisIsKnownToHaveParameters);
-            }
-
-            string cacheTag = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind, "", cacheByPath, trait.AtCorpusPath);
-            dynamic rtsResult = null;
-            if (cacheTag != null)
-                ctx.Cache.TryGetValue(cacheTag, out rtsResult);
+            ResolvedTraitSet rtsResult = null;
 
             // store the previous reference symbol set, we will need to add it with
             // children found from the constructResolvedTraits call
-            SymbolSet currSymRefSet = resOpt.SymbolRefSet;
-            if (currSymRefSet == null)
-                currSymRefSet = new SymbolSet();
+            SymbolSet currSymRefSet = resOpt.SymbolRefSet ?? new SymbolSet();
             resOpt.SymbolRefSet = new SymbolSet();
 
-            // if not, then make one and save it
-            if (rtsResult == null)
+            // get the set of resolutions, should just be this one trait
+            if (rtsTrait == null)
             {
-                // get the set of resolutions, should just be this one trait
-                if (rtsTrait == null)
+                // store current symbol ref set
+                SymbolSet newSymbolRefSet = resOpt.SymbolRefSet;
+                resOpt.SymbolRefSet = new SymbolSet();
+
+                rtsTrait = trait.FetchResolvedTraits(resOpt);
+
+                // bubble up symbol reference set from children
+                if (newSymbolRefSet != null)
                 {
-                    // store current symbol ref set
-                    SymbolSet newSymbolRefSet = resOpt.SymbolRefSet;
-                    resOpt.SymbolRefSet = new SymbolSet();
-
-                    rtsTrait = trait.FetchResolvedTraits(resOpt);
-
-                    // bubble up symbol reference set from children
-                    if (newSymbolRefSet != null)
-                    {
-                        newSymbolRefSet.Merge(resOpt.SymbolRefSet);
-                    }
-                    resOpt.SymbolRefSet = newSymbolRefSet;
+                    newSymbolRefSet.Merge(resOpt.SymbolRefSet);
                 }
-                if (rtsTrait != null)
-                    rtsResult = rtsTrait.DeepCopy();
+                resOpt.SymbolRefSet = newSymbolRefSet;
+            }
+            if (rtsTrait != null)
+            {
+                rtsResult = rtsTrait.DeepCopy();
+            }
 
-                // now if there are argument for this application, set the values in the array
-                if (this.Arguments != null && rtsResult != null)
+            // now if there are argument for this application, set the values in the array
+            if (this.Arguments != null && rtsResult != null)
+            {
+                // if never tried to line up arguments with parameters, do that
+                if (!this.ResolvedArguments)
                 {
-                    // if never tried to line up arguments with parameters, do that
-                    if (!this.ResolvedArguments)
+                    this.ResolvedArguments = true;
+                    ParameterCollection param = trait.FetchAllParameters(resOpt);
+                    int argumentIndex = 0;
+                    foreach (CdmArgumentDefinition argument in this.Arguments)
                     {
-                        this.ResolvedArguments = true;
-                        ParameterCollection param = trait.FetchAllParameters(resOpt);
-                        CdmParameterDefinition paramFound = null;
-                        dynamic aValue = null;
-
-                        int iArg = 0;
-                        if (this.Arguments != null)
-                        {
-                            foreach (CdmArgumentDefinition argument in this.Arguments)
-                            {
-                                paramFound = param.ResolveParameter(iArg, argument.Name);
-                                argument.ResolvedParameter = paramFound;
-                                aValue = argument.Value;
-                                aValue = ctx.Corpus.ConstTypeCheck(resOpt, this.InDocument, paramFound, aValue);
-                                argument.Value = aValue;
-                                iArg++;
-                            }
-                        }
-                    }
-                    if (this.Arguments != null)
-                    {
-                        foreach (CdmArgumentDefinition a in this.Arguments)
-                        {
-                            rtsResult.SetParameterValueFromArgument(trait, a);
-                        }
+                        CdmParameterDefinition paramFound = param.ResolveParameter(argumentIndex, argument.Name);
+                        argument.ResolvedParameter = paramFound;
+                        argument.Value = paramFound.ConstTypeCheck(resOpt, this.InDocument, argument.Value);
+                        argumentIndex++;
                     }
                 }
 
-                // register set of possible symbols
-                ctx.Corpus.RegisterDefinitionReferenceSymbols(this.FetchObjectDefinition<CdmObjectDefinition>(resOpt), kind, resOpt.SymbolRefSet);
-
-                // get the new cache tag now that we have the list of symbols
-                cacheTag = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind, "", cacheByPath, trait.AtCorpusPath);
-                if (!string.IsNullOrWhiteSpace(cacheTag))
-                    ctx.Cache[cacheTag] = rtsResult;
+                foreach (CdmArgumentDefinition argument in this.Arguments)
+                {
+                    rtsResult.SetParameterValueFromArgument(trait, argument);
+                }
             }
-            else
+            // if an explicit verb is set, remember this. don't resolve that verb trait, cuz that sounds nuts.
+            if (this.Verb != null)
             {
-                // cache was found
-                // get the SymbolSet for this cached object
-                string key = CdmCorpusDefinition.CreateCacheKeyFromObject(this, kind);
-                ctx.Corpus.DefinitionReferenceSymbols.TryGetValue(key, out SymbolSet tempDocRefSet);
-                resOpt.SymbolRefSet = tempDocRefSet;
+                rtsResult.SetExplicitVerb(trait, this.Verb);
             }
+            // if a collection of meta traits exist, save on the resolved but don't resolve these. again, nuts
+            if (this.AppliedTraits != null && this.AppliedTraits.Count > 0)
+            {
+                rtsResult.SetMetaTraits(trait, this.AppliedTraits.AllItems);
+            }
+
+            // register set of possible symbols
+            ctx.Corpus.RegisterDefinitionReferenceSymbols(this.FetchObjectDefinition<CdmObjectDefinition>(resOpt), kind, resOpt.SymbolRefSet);
 
             // merge child document set with current
             currSymRefSet.Merge(resOpt.SymbolRefSet);

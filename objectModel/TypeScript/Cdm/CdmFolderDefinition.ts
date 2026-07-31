@@ -11,12 +11,12 @@ import {
     CdmObjectDefinition,
     CdmObjectDefinitionBase,
     cdmObjectType,
-    Errors,
+    cdmLogCode,
     Logger,
     ResolvedAttributeSet,
     ResolvedTraitSet,
     resolveOptions,
-    StorageAdapter,
+    StringUtils,
     VisitCallback
 } from '../internal';
 
@@ -24,6 +24,8 @@ import {
  * The object model implementation for Folder object.
  */
 export class CdmFolderDefinition extends CdmObjectDefinitionBase {
+    private TAG: string = CdmFolderDefinition.name;
+
     /**
      * @inheritdoc
      */
@@ -31,9 +33,18 @@ export class CdmFolderDefinition extends CdmObjectDefinitionBase {
 
     /**
      * @inheritdoc
-     * @deprecated Only for internal use.
      */
-    public folderPath: string;
+    public get folderPath(): string {
+        return this._folderPath;
+    }
+
+    /**
+     * @inheritdoc
+     * @internal
+     */
+    public set folderPath(value: string) {
+        this._folderPath = value;
+    }
 
     /**
      * @inheritdoc
@@ -59,9 +70,18 @@ export class CdmFolderDefinition extends CdmObjectDefinitionBase {
 
     /**
      * @inheritdoc
-     * @deprecated Only for internal use.
      */
-    public namespace: string;
+    public get namespace(): string {
+        return this._namespace;
+    }
+
+    /**
+     * @inheritdoc
+     * @internal
+     */
+    public set namespace(value: string) {
+        this._namespace = value;
+    }
 
     /**
      * @inheritdoc
@@ -71,6 +91,9 @@ export class CdmFolderDefinition extends CdmObjectDefinitionBase {
     public static get objectType(): cdmObjectType {
         return cdmObjectType.folderDef;
     }
+
+    private _folderPath: string;
+    private _namespace: string;
 
     /**
      * Initializes a new instance of theFolderImpl class.
@@ -99,13 +122,8 @@ export class CdmFolderDefinition extends CdmObjectDefinitionBase {
      */
     public validate(): boolean {
         if (!this.name) {
-            Logger.error(
-                CdmFolderDefinition.name,
-                this.ctx,
-                Errors.validateErrorString(this.atCorpusPath, ['name']),
-                this.validate.name
-            );
-
+            let missingFields: string[] = ['name'];
+            Logger.error(this.ctx, this.TAG, this.validate.name, this.atCorpusPath, cdmLogCode.ErrValdnIntegrityCheckFailure, missingFields.map((s: string) => `'${s}'`).join(', '), this.atCorpusPath);
             return false;
         }
 
@@ -137,18 +155,13 @@ export class CdmFolderDefinition extends CdmObjectDefinitionBase {
         let remainingPath: string = path;
         let childFolder: CdmFolderDefinition = this;
 
-        while (childFolder && remainingPath.indexOf('/') != -1) {
+        while (childFolder && remainingPath.indexOf('/') !== -1) {
             let first: number = remainingPath.indexOf('/');
             name = remainingPath.slice(0, first);
             remainingPath = remainingPath.slice(first + 1);
 
             if (name.toLowerCase() !== childFolder.name.toLowerCase()) {
-                Logger.error(
-                    CdmFolderDefinition.name,
-                    this.ctx,
-                    `Invalid path '${path}'`,
-                    this.fetchChildFolderFromPath.name
-                );
+                Logger.error(this.ctx, this.TAG, this.fetchChildFolderFromPath.name, undefined, cdmLogCode.ErrInvalidPath);
                 return undefined;
             }
 
@@ -159,29 +172,15 @@ export class CdmFolderDefinition extends CdmObjectDefinitionBase {
 
             first = remainingPath.indexOf('/')
             let childFolderName: string = remainingPath
-            if (first != -1) {
+            if (first !== -1) {
                 childFolderName = remainingPath.slice(0, first);
             } else {
                 // the last part of the path will be considered part of the part depending on the make_folder flag.
                 break
             }
 
-            // check children folders
-            let result: CdmFolderDefinition;
-            if (childFolder.childFolders) {
-                for (const folder of childFolder.childFolders) {
-                    if (childFolderName.toLowerCase() == folder.name.toLowerCase()) {
-                        result = folder;
-                        break;
-                    }
-                }
-            }
-
-            if (!result) {
-                result = childFolder.childFolders.push(childFolderName);
-            }
-
-            childFolder = result;
+            // get next child folder.
+            childFolder = childFolder.childFolders.getOrCreate(childFolderName);
         }
 
         if (makeFolder) {
@@ -197,9 +196,8 @@ export class CdmFolderDefinition extends CdmObjectDefinitionBase {
      */
     public async fetchDocumentFromFolderPathAsync(
         objectPath: string,
-        adapter: StorageAdapter,
         forceReload: boolean = false,
-        resOpt: resolveOptions = null): Promise<CdmDocumentDefinition> {
+        resOpt: resolveOptions = undefined): Promise<CdmDocumentDefinition> {
         let docName: string;
         let remainingPath: string;
         const first: number = objectPath.indexOf('/', 0);
@@ -221,7 +219,7 @@ export class CdmFolderDefinition extends CdmObjectDefinitionBase {
 
             // remove them from the caches since they will be back in a moment
             if (doc.isDirty) {
-                Logger.warning('CdmFolderDefinition', this.ctx, `discarding changes in document: ${doc.name}`);
+                Logger.warning(this.ctx, this.TAG, this.fetchDocumentFromFolderPathAsync.name, undefined, cdmLogCode.WarnDocChangesDiscarded, doc.name);
             }
             this.documents.remove(docName);
         }

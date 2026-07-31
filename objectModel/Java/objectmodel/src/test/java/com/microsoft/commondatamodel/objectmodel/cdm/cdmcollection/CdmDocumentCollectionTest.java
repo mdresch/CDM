@@ -15,9 +15,9 @@ import org.testng.annotations.Test;
 public class CdmDocumentCollectionTest {
 
   @Test
-  public void testDocumentCollectionAdd() {
+  public void testDocumentCollectionAdd() throws InterruptedException {
     final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+        CdmCollectionHelperFunctions.generateManifest();
 
     final CdmFolderDefinition folder = new CdmFolderDefinition(manifest.getCtx(), "Folder");
     folder.setCorpus(manifest.getCtx().getCorpus());
@@ -36,12 +36,15 @@ public class CdmDocumentCollectionTest {
     Assert.assertEquals(folder, document.getOwner());
     Assert.assertEquals("Namespace", document.getNamespace());
     Assert.assertTrue(document.getNeedsIndexing());
+
+    final CdmDocumentDefinition doc = folder.getDocuments().add(document);
+    Assert.assertNull(doc);
   }
 
   @Test
-  public void testDocumentCollectionInsert() {
+  public void testDocumentCollectionInsert() throws InterruptedException {
     final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+        CdmCollectionHelperFunctions.generateManifest();
 
     final CdmFolderDefinition folder = new CdmFolderDefinition(manifest.getCtx(), "Folder");
     folder.setInDocument(manifest);
@@ -73,13 +76,16 @@ public class CdmDocumentCollectionTest {
     Assert.assertTrue(manifest.getCtx().getCorpus()
         .getDocumentLibrary()
         .contains(ImmutablePair.of(folder, document)));
+    
+    folder.getDocuments().add(2, document);
+    Assert.assertEquals(3, folder.getDocuments().getCount());
   }
 
   @Test
-  public void testDocumentCollectionAddWithDocumentName() {
+  public void testDocumentCollectionAddWithDocumentName() throws InterruptedException {
 
     final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+        CdmCollectionHelperFunctions.generateManifest();
 
     final CdmFolderDefinition folder = new CdmFolderDefinition(manifest.getCtx(), "Folder");
     folder.setCorpus(manifest.getCtx().getCorpus());
@@ -99,9 +105,9 @@ public class CdmDocumentCollectionTest {
   }
 
   @Test
-  public void testDocumentCollectionAddAll() {
+  public void testDocumentCollectionAddAll() throws InterruptedException {
     final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+        CdmCollectionHelperFunctions.generateManifest();
 
     final CdmFolderDefinition folder = new CdmFolderDefinition(manifest.getCtx(), "Folder");
     folder.setCorpus(manifest.getCtx().getCorpus());
@@ -136,9 +142,9 @@ public class CdmDocumentCollectionTest {
   }
 
   @Test
-  public void testDocumentCollectionRemove() {
+  public void testDocumentCollectionRemove() throws InterruptedException {
     final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+        CdmCollectionHelperFunctions.generateManifest();
 
     final CdmFolderDefinition folder = new CdmFolderDefinition(manifest.getCtx(), "Folder");
     folder.setCorpus(manifest.getCtx().getCorpus());

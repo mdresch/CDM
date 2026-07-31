@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Cdm
@@ -7,11 +7,30 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
     using Microsoft.CommonDataModel.ObjectModel.Persistence;
     using Microsoft.CommonDataModel.ObjectModel.ResolvedModel;
     using Microsoft.CommonDataModel.ObjectModel.Utilities;
+    using Microsoft.CommonDataModel.ObjectModel.Utilities.Logging;
     using System;
     using System.Collections.Generic;
 
     public abstract class CdmObjectBase : CdmObject
     {
+        private static readonly string Tag = nameof(CdmObjectBase);
+        /// <summary>
+        /// The minimum json semantic versions that can be loaded by this ObjectModel version.
+        /// </summary>
+        public static readonly string JsonSchemaSemanticVersionMinimumLoad = "1.0.0";
+        /// <summary>
+        /// The minimum json semantic versions that can be saved by this ObjectModel version.
+        /// </summary>
+        public static readonly string JsonSchemaSemanticVersionMinimumSave = "1.1.0";
+        /// <summary>
+        /// The maximum json semantic versions that can be loaded and saved by this ObjectModel version.
+        /// </summary>
+        public static readonly string JsonSchemaSemanticVersionMaximumSaveLoad = "1.5.0";
+
+        // known semantic versions changes
+        public static readonly string JsonSchemaSemanticVersionProjections = "1.4.0";
+        public static readonly string JsonSchemaSemanticVersionTraitsOnTraits = "1.5.0";
+
         public CdmObjectBase(CdmCorpusContext ctx)
         {
             if (ctx?.Corpus != null)
@@ -25,6 +44,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                     // acquire spinlock
                     ctx.Corpus.spinLock.Enter(ref lockTaken);
                     this.Id = CdmCorpusDefinition.NextId();
+                    // why not use System.Threading.Interlocked.Increment;
 
                 }
                 finally
@@ -72,8 +92,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <inheritdoc />
         public abstract T FetchObjectDefinition<T>(ResolveOptions resOpt = null) where T : CdmObjectDefinition;
 
-        protected bool resolvingAttributes = false;
-        protected bool circularReference;
 
         /// <inheritdoc />
         public virtual string AtCorpusPath
@@ -93,6 +111,101 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 
         /// <inheritdoc />
         public virtual CdmDocumentDefinition InDocument { get; set; }
+
+        /// returns a list of TraitProfile descriptions, one for each trait applied to or exhibited by this object.
+        /// each description of a trait is an expanded picture of a trait reference.
+        /// the goal of the profile is to make references to structured, nested, messy traits easier to understand and compare.
+        /// we do this by promoting and merging some information as far up the trait inheritance / reference chain as far as we can without 
+        /// giving up important meaning.
+        /// in general, every trait profile includes:
+        /// 1. the name of the trait
+        /// 2. a TraitProfile for any trait that this trait may 'extend', that is, a base class trait
+        /// 3. a map of argument / parameter values that have been set
+        /// 4. an applied 'verb' trait in the form of a TraitProfile
+        /// 5. an array of any "classifier" traits that have been applied
+        /// 6. and array of any other (non-classifier) traits that have been applied or exhibited by this trait
+        /// 
+        /// adjustments to these ideas happen as trait information is 'bubbled up' from base definitons. adjustments include
+        /// 1. the most recent verb trait that was defined or applied will propigate up the hierarchy for all references even those that do not specify a verb. 
+        /// This ensures the top trait profile depicts the correct verb
+        /// 2. traits that are applied or exhibited by another trait using the 'classifiedAs' verb are put into a different collection called classifiers.
+        /// 3. classifiers are accumulated and promoted from base references up to the final trait profile. this way the top profile has a complete list of classifiers 
+        /// but the 'deeper' profiles will not have the individual classifications set (to avoid an explosion of info)
+        /// 3. In a similar way, trait arguments will accumulate from base definitions and default values. 
+        /// 4. traits used as 'verbs' (defaultVerb or explicit verb) will not include classifier descriptions, this avoids huge repetition of somewhat pointless info and recursive effort
+
+        public List<TraitProfile> FetchTraitProfiles(ResolveOptions resOpt = null, TraitProfileCache cache = null, string forVerb = null)
+        {
+            if (cache == null)
+            {
+                cache = new TraitProfileCache();
+            }
+
+            if (resOpt == null)
+            {
+                // resolve symbols with default directive and WRTDoc from this object's point of view
+                resOpt = new ResolveOptions(this, this.Ctx.Corpus.DefaultResolutionDirectives);
+            }
+
+            var result = new List<TraitProfile>();
+
+            CdmTraitCollection traits = null;
+            TraitProfile prof = null;
+            if (this is CdmAttributeItem)
+            {
+                traits = (this as CdmAttributeItem).AppliedTraits;
+            }
+            else if (this is CdmTraitDefinition)
+            {
+                prof = TraitProfile.traitDefToProfile(this as CdmTraitDefinition, resOpt, false, false, cache);
+            }
+            else if (this is CdmObjectDefinition)
+            {
+                traits = (this as CdmObjectDefinition).ExhibitsTraits;
+            }
+            else if (this is CdmTraitReference)
+            {
+                prof = TraitProfile.traitRefToProfile(this as CdmTraitReference, resOpt, false, false, true, cache);
+            }
+            else if (this is CdmTraitGroupReference)
+            {
+                prof = TraitProfile.traitRefToProfile(this as CdmTraitGroupReference, resOpt, false, false, true, cache);
+            }
+            else if (this is CdmObjectReference)
+            {
+                traits = (this as CdmObjectReference).AppliedTraits;
+            }
+            // one of these two will happen
+            if (prof != null)
+            {
+                if (prof.Verb == null || forVerb == null || prof.Verb.TraitName == forVerb)
+                {
+                    result.Add(prof);
+                }
+            }
+            if (traits != null)
+            {
+                foreach (var tr in traits)
+                {
+                    prof = TraitProfile.traitRefToProfile(tr, resOpt, false, false, true, cache);
+                    if (prof != null)
+                    {
+                        if (prof.Verb == null || forVerb == null || prof.Verb.TraitName == forVerb)
+                        {
+                            result.Add(prof);
+                        }
+                    }
+                }
+            }
+
+            if (result.Count == 0)
+            {
+                result = null;
+            }
+
+            return result;
+        }
+
         internal virtual void ConstructResolvedTraits(ResolvedTraitSetBuilder rtsb, ResolveOptions resOpt)
         {
             return;
@@ -119,9 +232,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             string cacheTagA = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind);
             ResolvedTraitSetBuilder rtsbAll = null;
             if (this.TraitCache == null)
+            {
                 this.TraitCache = new Dictionary<string, ResolvedTraitSetBuilder>();
+            }
             else if (!string.IsNullOrWhiteSpace(cacheTagA))
+            {
                 this.TraitCache.TryGetValue(cacheTagA, out rtsbAll);
+            }
 
             // store the previous document set, we will need to add it with
             // children found from the constructResolvedTraits call
@@ -157,7 +274,9 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                     // get the new cache tag now that we have the list of docs
                     cacheTagA = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind);
                     if (!string.IsNullOrWhiteSpace(cacheTagA))
+                    {
                         this.TraitCache[cacheTagA] = rtsbAll;
+                    }
                 }
             }
             else
@@ -165,7 +284,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 // cache was found
                 // get the SymbolSet for this cached object
                 string key = CdmCorpusDefinition.CreateCacheKeyFromObject(this, kind);
-                ((CdmCorpusDefinition)ctx.Corpus).DefinitionReferenceSymbols.TryGetValue(key, out SymbolSet tempDocRefSet);
+                ctx.Corpus.DefinitionReferenceSymbols.TryGetValue(key, out SymbolSet tempDocRefSet);
                 resOpt.SymbolRefSet = tempDocRefSet;
             }
 
@@ -176,17 +295,19 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             this.Ctx.Corpus.isCurrentlyResolving = wasPreviouslyResolving;
             return rtsbAll.ResolvedTraitSet;
         }
-        virtual internal ResolvedAttributeSetBuilder FetchObjectFromCache(ResolveOptions resOpt, AttributeContextParameters acpInContext = null)
+
+        virtual internal ResolvedAttributeSetBuilder FetchObjectFromCache(ResolveOptions resOpt, AttributeContextParameters acpInContext)
         {
             const string kind = "rasb";
             ResolveContext ctx = this.Ctx as ResolveContext;
             string cacheTag = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind, acpInContext != null ? "ctx" : "");
 
-            dynamic rasbCache = null;
+            ResolvedAttributeSetBuilder rasbCache = null;
             if (cacheTag != null)
             {
-                ctx.Cache.TryGetValue(cacheTag, out rasbCache);
+                ctx.AttributeCache.TryGetValue(cacheTag, out rasbCache);
             }
+
             return rasbCache;
         }
 
@@ -199,18 +320,28 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 resOpt = new ResolveOptions(this, this.Ctx.Corpus.DefaultResolutionDirectives);
             }
 
+            bool inCircularReference = false;
+            bool wasInCircularReference = resOpt.InCircularReference;
+            if (this is CdmEntityDefinition entity)
+            {
+                inCircularReference = resOpt.CurrentlyResolvingEntities.Contains(entity);
+                resOpt.CurrentlyResolvingEntities.Add(entity);
+                resOpt.InCircularReference = inCircularReference;
+
+                // uncomment this line as a test to turn off allowing cycles
+                //if (inCircularReference)
+                //{
+                //    return new ResolvedAttributeSet();
+                //}
+            }
+
+            int currentDepth = resOpt.DepthInfo.CurrentDepth;
 
             const string kind = "rasb";
             ResolveContext ctx = this.Ctx as ResolveContext;
             ResolvedAttributeSetBuilder rasbResult = null;
-            // keep track of the context node that the results of this call would like to use as the parent
-            CdmAttributeContext parentCtxForResult = null;
             ResolvedAttributeSetBuilder rasbCache = this.FetchObjectFromCache(resOpt, acpInContext);
-            CdmAttributeContext underCtx = null;
-            if (acpInContext != null)
-            {
-                parentCtxForResult = acpInContext.under;
-            }
+            CdmAttributeContext underCtx;
 
             // store the previous document set, we will need to add it with
             // children found from the constructResolvedTraits call
@@ -222,22 +353,24 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             resOpt.SymbolRefSet = new SymbolSet();
 
             // if using the cache passes the maxDepth, we cannot use it
-            if (rasbCache != null && resOpt.DepthInfo != null && resOpt.DepthInfo.CurrentDepth + rasbCache.ResolvedAttributeSet.DepthTraveled > resOpt.DepthInfo.MaxDepth)
+            if (rasbCache != null && resOpt.DepthInfo.CurrentDepth + rasbCache.ResolvedAttributeSet.DepthTraveled > resOpt.DepthInfo.MaxDepth)
             {
+                Logger.Warning(ctx, Tag, nameof(FetchResolvedAttributes), this.AtCorpusPath, CdmLogCode.WarnMaxDepthExceeded, resOpt.DepthInfo.MaxDepth?.ToString(), this.FetchObjectDefinitionName());
                 rasbCache = null;
             }
 
             if (rasbCache == null)
             {
-                if (this.resolvingAttributes)
+                // to help view the hierarchy of loops in resolving entities
+                if (this is CdmEntityDefinition && this.Ctx.GetFeatureFlagValue("core_entResDbg") == true)
                 {
-                    // re-entered this attribute through some kind of self or looping reference.
-                    this.Ctx.Corpus.isCurrentlyResolving = wasPreviouslyResolving;
-                    //return new ResolvedAttributeSet();  // uncomment this line as a test to turn off allowing cycles
-                    resOpt.InCircularReference = true;
-                    this.circularReference = true;
+                    string spew = "[entResDbg] ";
+                    foreach (var chain in resOpt.CurrentlyResolvingEntities)
+                        spew += ">:";
+                    spew += "(Reslv)";
+                    spew += (this as CdmEntityDefinition).EntityName;
+                    System.Diagnostics.Debug.WriteLine(spew);
                 }
-                this.resolvingAttributes = true;
 
                 // a new context node is needed for these attributes, 
                 // this tree will go into the cache, so we hang it off a placeholder parent
@@ -247,8 +380,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 
                 rasbCache = this.ConstructResolvedAttributes(resOpt, underCtx);
 
-                this.resolvingAttributes = false;
-
                 if (rasbCache != null)
                 {
                     // register set of possible docs
@@ -257,29 +388,52 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                     {
                         ctx.Corpus.RegisterDefinitionReferenceSymbols(oDef, kind, resOpt.SymbolRefSet);
 
+                        if (this.ObjectType == CdmObjectType.EntityDef)
+                        {
+                            // if we just got attributes for an entity, take the time now to clean up this cached tree and prune out
+                            // things that don't help explain where the final set of attributes came from
+                            if (underCtx != null)
+                            {
+                                var scopesForAttributes = new HashSet<CdmAttributeContext>();
+                                underCtx.CollectContextFromAtts(rasbCache.ResolvedAttributeSet, scopesForAttributes); // the context node for every final attribute
+                                if (!underCtx.PruneToScope(scopesForAttributes))
+                                {
+                                    return null;
+                                }
+                            }
+                        }
+
                         // get the new cache tag now that we have the list of docs
                         string cacheTag = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind, acpInContext != null ? "ctx" : null);
 
                         // save this as the cached version
                         if (!string.IsNullOrWhiteSpace(cacheTag))
-                            ctx.Cache[cacheTag] = rasbCache;
+                        {
+                            ctx.AttributeCache[cacheTag] = rasbCache;
+                        }
                     }
                     // get the 'underCtx' of the attribute set from the acp that is wired into
                     // the target tree
-                    underCtx = (rasbCache as ResolvedAttributeSetBuilder).ResolvedAttributeSet.AttributeContext?.GetUnderContextFromCacheContext(resOpt, acpInContext);
-                }
-
-                if (this.circularReference)
-                {
-                    resOpt.InCircularReference = false;
+                    underCtx = rasbCache.ResolvedAttributeSet.AttributeContext?.GetUnderContextFromCacheContext(resOpt, acpInContext);
                 }
             }
             else
             {
+                // to help view the hierarchy of loops in resolving entities
+                //if (this is CdmEntityDefinition)
+                //{
+                //    string spew = "[entResDbg] ";
+                //    foreach (var chain in resOpt.CurrentlyResolvingEntities)
+                //        spew += ">";
+                //    spew += "(Cache):";
+                //    spew += (this as CdmEntityDefinition).EntityName;
+                //    System.Diagnostics.Debug.WriteLine(spew);
+                //}
+
                 // get the 'underCtx' of the attribute set from the cache. The one stored there was build with a different
                 // acp and is wired into the fake placeholder. so now build a new underCtx wired into the output tree but with
                 // copies of all cached children
-                underCtx = (rasbCache as ResolvedAttributeSetBuilder).ResolvedAttributeSet.AttributeContext?.GetUnderContextFromCacheContext(resOpt, acpInContext);
+                underCtx = rasbCache.ResolvedAttributeSet.AttributeContext?.GetUnderContextFromCacheContext(resOpt, acpInContext);
                 //underCtx.ValidateLineage(resOpt); // debugging
             }
 
@@ -291,36 +445,46 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 // 2. deep copy the tree. 
 
                 // 1. deep copy the resolved att set (may have groups) and leave the attCtx pointers set to the old tree
-                rasbResult = new ResolvedAttributeSetBuilder();
-                rasbResult.ResolvedAttributeSet = (rasbCache as ResolvedAttributeSetBuilder).ResolvedAttributeSet.Copy();
+                rasbResult = new ResolvedAttributeSetBuilder
+                {
+                    ResolvedAttributeSet = rasbCache.ResolvedAttributeSet.Copy()
+                };
 
                 // 2. deep copy the tree and map the context references. 
                 if (underCtx != null) // null context? means there is no tree, probably 0 attributes came out
                 {
-                    if (underCtx.AssociateTreeCopyWithAttributes(resOpt, rasbResult.ResolvedAttributeSet) == false)
+                    if (!underCtx.AssociateTreeCopyWithAttributes(resOpt, rasbResult.ResolvedAttributeSet))
                     {
                         return null;
                     }
                 }
             }
 
-            DepthInfo currDepthInfo = resOpt.DepthInfo;
-            if (this is CdmEntityAttributeDefinition && currDepthInfo != null)
+            if (this is CdmEntityAttributeDefinition)
             {
-                // if we hit the maxDepth, we are now going back up
-                currDepthInfo.CurrentDepth--;
+                // current depth should now be set to this entity attribute level
+                resOpt.DepthInfo.CurrentDepth = currentDepth;
                 // now at the top of the chain where max depth does not influence the cache
-                if (currDepthInfo.CurrentDepth <= 0)
+                if (currentDepth == 0)
                 {
-                    resOpt.DepthInfo = null;
+                    resOpt.DepthInfo.MaxDepthExceeded = false;
                 }
             }
+            
+            if (!inCircularReference && this.ObjectType == CdmObjectType.EntityDef)
+            {
+                // should be removed from the root level only
+                // if it is in a circular reference keep it there
+                resOpt.CurrentlyResolvingEntities.Remove(this as CdmEntityDefinition);
+            }
+            resOpt.InCircularReference = wasInCircularReference;
 
             // merge child document set with current
             currDocRefSet.Merge(resOpt.SymbolRefSet);
             resOpt.SymbolRefSet = currDocRefSet;
 
             this.Ctx.Corpus.isCurrentlyResolving = wasPreviouslyResolving;
+
             return rasbResult?.ResolvedAttributeSet;
         }
 
@@ -354,7 +518,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 options = new CopyOptions();
             }
 
-            string persistenceTypeName = "CdmFolder";
+            string persistenceTypeName = options?.PersistenceTypeName;
+
+            if (persistenceTypeName == null || persistenceTypeName == "")
+            {
+                persistenceTypeName = "CdmFolder";
+            }
+
             return PersistenceLayer.ToData<T, dynamic>(instance, resOpt, options, persistenceTypeName);
         }
 
@@ -416,10 +586,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 
         internal static CdmTraitReference ResolvedTraitToTraitRef(ResolveOptions resOpt, ResolvedTrait rt)
         {
-            CdmTraitReference traitRef = null;
+            // if nothing extra needs a mention, make a simple string ref
+            CdmTraitReference traitRef = rt.Trait.Ctx.Corpus.MakeObject<CdmTraitReference>(CdmObjectType.TraitRef, rt.TraitName,
+                                                                !((rt.ParameterValues != null && rt.ParameterValues.Length > 0) ||
+                                                                rt.ExplicitVerb != null || rt.MetaTraits != null));
+
             if (rt.ParameterValues != null && rt.ParameterValues.Length > 0)
             {
-                traitRef = rt.Trait.Ctx.Corpus.MakeObject<CdmTraitReference>(CdmObjectType.TraitRef, rt.TraitName, false);
                 int l = rt.ParameterValues.Length;
                 if (l == 1)
                 {
@@ -443,18 +616,30 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                     }
                 }
             }
-            else
-                traitRef = rt.Trait.Ctx.Corpus.MakeObject<CdmTraitReference>(CdmObjectType.TraitRef, rt.TraitName, true);
+            if (rt.ExplicitVerb != null)
+            {
+                traitRef.Verb = rt.ExplicitVerb.Copy(resOpt) as CdmTraitReference;
+                traitRef.Verb.Owner = traitRef;
+            }
+
+            if (rt.MetaTraits != null)
+            {
+                foreach(var trMeta in rt.MetaTraits)
+                {
+                    var trMetaCopy = trMeta.Copy(resOpt) as CdmTraitReference;
+                    traitRef.AppliedTraits.Add(trMetaCopy);
+                }
+            }
             if (resOpt.SaveResolutionsOnCopy)
             {
                 // used to localize references between documents
-                traitRef.ExplicitReference = rt.Trait as CdmTraitDefinition;
-                traitRef.InDocument = (rt.Trait as CdmTraitDefinition).InDocument;
+                traitRef.ExplicitReference = rt.Trait;
+                traitRef.InDocument = rt.Trait.InDocument;
             }
             // always make it a property when you can, however the dataFormat traits should be left alone
             // also the wellKnown is the first constrained list that uses the datatype to hold the table instead of the default value property.
             // so until we figure out how to move the enums away from default value, show that trait too
-            if (rt.Trait.AssociatedProperties != null && !rt.Trait.IsDerivedFrom("is.dataFormat", resOpt) && !(rt.Trait.TraitName == "is.constrainedList.wellKnown"))
+            if (rt.Trait.AssociatedProperties != null && rt.Trait.AssociatedProperties.Count > 0 && !rt.Trait.IsDerivedFrom("is.dataFormat", resOpt) && !(rt.Trait.TraitName == "is.constrainedList.wellKnown"))
                 traitRef.IsFromProperty = true;
             return traitRef;
         }
@@ -462,5 +647,63 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <inheritdoc />
         public abstract CdmObjectReference CreateSimpleReference(ResolveOptions resOpt = null);
         internal abstract CdmObjectReference CreatePortableReference(ResolveOptions resOpt);
+        virtual internal long GetMinimumSemanticVersion()
+        {
+            return CdmObjectBase.DefaultJsonSchemaSemanticVersionNumber;
+        }
+        /// <summary>
+        /// converts a string in the form MM.mm.pp into a single comparable long integer
+        /// limited to 3 parts where each part is 5 numeric digits or fewer
+        /// returns -1 if failure
+        /// </summary>
+        public static long SemanticVersionStringToNumber(string version)
+        {
+            if (version == null)
+            {
+                return -1;
+            }
+
+            // must have the three parts
+            var SemanticVersionSplit = version.Split('.');
+            if (SemanticVersionSplit.Length != 3)
+            {
+                return -1;
+            }
+
+            // accumulate the result
+            long numVer = 0;
+            for (var i = 0; i < 3; ++i)
+            {
+                if (!int.TryParse(SemanticVersionSplit[i], out int verPart))
+                {
+                    return -1;
+                }
+                // 6 digits?
+                if (verPart > 100000)
+                {
+                    return -1;
+                }
+                // shift the previous accumulation over 5 digits and add in the new part
+                numVer *= 100000;
+                numVer += verPart;
+            }
+            return numVer;
+        }
+
+        /// <summary>
+        /// converts a number encoding 3 version parts into a string in the form MM.mm.pp
+        /// assumes 5 digits per encoded version part
+        /// </summary>
+        public static string SemanticVersionNumberToString(long version)
+        {
+            var verPartM = version / (100000L * 100000L);
+            version = version - (verPartM * (100000L * 100000L));
+            var verPartm = version / 100000L;
+            var verPartP = version - (verPartm * 100000L);
+            return $"{verPartM}.{verPartm}.{verPartP}";
+        }
+
+        internal static long DefaultJsonSchemaSemanticVersionNumber = SemanticVersionStringToNumber(JsonSchemaSemanticVersionMinimumSave);
+
     }
 }

@@ -13,12 +13,15 @@ import {
     CdmFolderDefinition,
     CdmImport,
     CdmManifestDefinition,
+    cdmLogCode,
     cdmObjectType,
     CdmTraitDefinition,
     CdmTraitReference,
     copyOptions,
     resolveOptions,
-    traitToPropertyMap
+    traitToPropertyMap,
+    StringUtils,
+    constants
 } from '../../internal';
 import {
     isLocalEntityDeclarationDefinition,
@@ -33,6 +36,8 @@ import {
 } from './types';
 
 export class ManifestPersistence {
+    private static TAG: string = ManifestPersistence.name;
+
     // Whether this persistence class has async methods.
     public static readonly isPersistenceAsync: boolean = true;
 
@@ -43,9 +48,7 @@ export class ManifestPersistence {
         const extensionTraitDefList: CdmTraitDefinition[] = [];
 
         const manifest: CdmManifestDefinition = ctx.corpus.MakeObject<CdmManifestDefinition>(cdmObjectType.manifestDef, obj.name);
-
-        // We need to set up folder path and namespace of a manifest to be able to retrieve that object.
-        folder.documents.push(manifest);
+        manifest.virtualLocation = folder.folderPath + CdmConstants.modelJsonExtension;
 
         if (obj['cdm:imports']) {
             obj['cdm:imports'].forEach((impElement: object) => {
@@ -54,8 +57,8 @@ export class ManifestPersistence {
             });
         }
 
-        if (!manifest.imports.allItems.some((importPresent: CdmImport) => importPresent.corpusPath === 'cdm:/foundations.cdm.json')) {
-            manifest.imports.push('cdm:/foundations.cdm.json');
+        if (!manifest.imports.allItems.some((importPresent: CdmImport) => importPresent.corpusPath === constants.FOUNDATIONS_CORPUS_PATH)) {
+            manifest.imports.push(constants.FOUNDATIONS_CORPUS_PATH);
         }
 
         manifest.explanation = obj.description;
@@ -72,7 +75,7 @@ export class ManifestPersistence {
             manifest.lastFileStatusCheckTime = new Date(obj['cdm:lastFileStatusCheckTime']);
         }
 
-        if (obj['cdm:documentVersion']) {
+        if (!StringUtils.isBlankByCdmStandard(obj['cdm:documentVersion'])) {
             manifest.documentVersion = obj['cdm:documentVersion'];
         }
 
@@ -153,18 +156,12 @@ export class ManifestPersistence {
                     const referenceEntity: ReferenceEntity = element as ReferenceEntity;
                     const entityLocation: string = referenceModels.get(referenceEntity.modelId);
                     if (!entityLocation) {
-                        Logger.error(
-                            ManifestPersistence.name,
-                            ctx,
-                            `Model Id ${referenceEntity.modelId} from ${referenceEntity.name} not found in referenceModels.`
-                        );
-
+                        Logger.error(ctx, this.TAG, this.fromObject.name, undefined, cdmLogCode.ErrPersistModelJsonModelIdNotFound);
                         return;
                     }
                     entity = await ModelJson.ReferencedEntityDeclarationPersistence.fromData(ctx, referenceEntity, entityLocation);
                 } else {
-                    Logger.error(ManifestPersistence.name, ctx, 'There was an error while trying to parse entity type.');
-
+                    Logger.error(ctx, this.TAG, this.fromObject.name, undefined, cdmLogCode.ErrPersistModelJsonEntityParsingError);
                     return;
                 }
 
@@ -172,9 +169,7 @@ export class ManifestPersistence {
                     manifest.entities.push(entity);
                     entitySchemaByName.set(entity.entityName, entity.entityPath);
                 } else {
-                    Logger.error(ManifestPersistence.name, ctx, 'There was an error while trying to parse entity type.');
-
-                    return;
+                    Logger.error(ctx, this.TAG, this.fromObject.name, undefined, cdmLogCode.ErrPersistModelJsonEntityParsingError);
                 }
             }
         }
@@ -187,12 +182,7 @@ export class ManifestPersistence {
                 if (cdmRelationship !== undefined) {
                     manifest.relationships.push(cdmRelationship);
                 } else {
-                    Logger.warning(
-                        ManifestPersistence.name,
-                        ctx,
-                        'There was an error while trying to convert model.json local entity to cdm local entity declaration.'
-                    );
-
+                    Logger.warning(ctx, this.TAG, this.fromObject.name, undefined, cdmLogCode.WarnPersistModelJsonRelReadFailed);
                     return undefined;
                 }
             }
@@ -277,12 +267,12 @@ export class ManifestPersistence {
         }
 
         // processAnnotationsToData also processes extensions.
-        ModelJson.utils.processTraitsAndAnnotationsToData(instance.ctx, result, instance.exhibitsTraits);
+        await ModelJson.utils.processTraitsAndAnnotationsToData(instance.ctx, result, instance.exhibitsTraits);
 
         if (instance.entities && instance.entities.length > 0) {
-            result.entities = [];
-            const promises: Promise<void>[] = instance.entities.allItems.map(
-                async (entity: CdmEntityDeclarationDefinition) => {
+            async function createPromise(instance) {
+                result.entities = [];
+                for (const entity of instance.entities.allItems) {
                     let element: LocalEntity | ReferenceEntity;
                     if (isLocalEntityDeclarationDefinition(entity)) {
                         element = await ModelJson.LocalEntityDeclarationPersistence.toData(
@@ -301,19 +291,24 @@ export class ManifestPersistence {
                         let entityLocation: string = instance.ctx.corpus.storage.corpusPathToAdapterPath(
                             entity.entityPath);
 
-                        if (!entityLocation) {
-                            Logger.error(ManifestPersistence.name, instance.ctx, `Invalid entity path set in entity ${entity.entityName}`);
+                        if (StringUtils.isBlankByCdmStandard(entityLocation)) {
+                            Logger.error(instance.ctx, ManifestPersistence.TAG, ManifestPersistence.toData.name, instance.atCorpusPath, cdmLogCode.ErrPersistModelJsonInvalidEntityPath, entity.entityName);
                             element = undefined;
                         }
 
                         const referenceEntity: ReferenceEntity = element as ReferenceEntity;
                         if (referenceEntity !== undefined) {
-                            entityLocation = entityLocation.substring(0, entityLocation.lastIndexOf('/'));
+                            // path separator can differ depending on the adapter, cover the case where path uses '/' or '\'
+                            const lastSlashLocation: number = entityLocation.lastIndexOf('/') > entityLocation.lastIndexOf('\\') ?
+                                entityLocation.lastIndexOf('/') : entityLocation.lastIndexOf('\\');
+                            if (lastSlashLocation > 0) {
+                                entityLocation = entityLocation.slice(0, lastSlashLocation);
+                            }
 
                             if (referenceEntity.modelId !== undefined) {
                                 const savedLocation: string = referenceModels.get(referenceEntity.modelId);
                                 if (savedLocation !== undefined && savedLocation !== entityLocation) {
-                                    Logger.error(ManifestPersistence.name, instance.ctx, 'Same ModelId pointing to different locations');
+                                    Logger.error(instance.ctx, ManifestPersistence.TAG, ManifestPersistence.toData.name, instance.atCorpusPath, cdmLogCode.ErrPersistModelJsonModelIdDuplication);
                                     element = undefined;
                                 } else if (savedLocation === undefined) {
                                     referenceModels.set(referenceEntity.modelId, entityLocation);
@@ -334,14 +329,12 @@ export class ManifestPersistence {
                     if (element) {
                         result.entities.push(element);
                     } else {
-                        Logger.error(
-                            ManifestPersistence.name,
-                            instance.ctx,
-                            `There was an error while trying to convert ${entity.entityName}'s entity declaration to model json format.`);
-                    }
+                        Logger.error(instance.ctx, ManifestPersistence.TAG, ManifestPersistence.toData.name, instance.atCorpusPath, cdmLogCode.ErrPersistModelJsonEntityDeclarationConversionError, entity.entityName);
+                    }                    
                 }
-            );
-            await Promise.all(promises);
+                return result.entities;
+            }
+            await createPromise(instance);
         }
 
         if (referenceModels.size > 0) {
@@ -364,20 +357,13 @@ export class ManifestPersistence {
 
                 if (relationship !== undefined) {
                     result.relationships.push(relationship);
-                } else {
-                    Logger.error(
-                        ManifestPersistence.name,
-                        instance.ctx,
-                        'There was an error while trying to convert cdm relationship to model.json relationship.'
-                    );
-
-                    return undefined;
                 }
             }
         }
 
+        result['cdm:imports'] = [];
+
         if (instance.imports && instance.imports.allItems.length > 0) {
-            result['cdm:imports'] = [];
             instance.imports.allItems.forEach((element: CdmImport) => {
                 const importObj: Import =
                     CdmFolder.ImportPersistence.toData(element, resOpt, options);
@@ -385,6 +371,15 @@ export class ManifestPersistence {
                     result['cdm:imports'].push(importObj);
                 }
             });
+
+        } 
+        
+        //  Importing foundations.cdm.json to resolve trait properly on manifest
+        if (instance.imports === undefined || instance.imports.item(constants.FOUNDATIONS_CORPUS_PATH, undefined, false) === undefined) {
+            const foundationsImport : Import = {
+                corpusPath: constants.FOUNDATIONS_CORPUS_PATH
+            };
+            result['cdm:imports'].push(foundationsImport);
         }
 
         return result;

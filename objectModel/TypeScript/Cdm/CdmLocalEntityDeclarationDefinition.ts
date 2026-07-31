@@ -8,22 +8,32 @@ import {
     CdmDataPartitionPatternDefinition,
     CdmEntityDeclarationDefinition,
     CdmFileStatus,
+    cdmIncrementalPartitionType,
+    cdmLogCode,
     CdmObject,
     CdmObjectDefinitionBase,
     cdmObjectType,
     CdmTraitCollection,
-    Errors,
+    CdmTraitReference,
+    CdmTraitReferenceBase,
+    constants,
+    fileStatusCheckOptions,
     Logger,
+    partitionFileStatusCheckType,
     resolveOptions,
+    StorageAdapterBase,
+    StorageAdapterCacheContext,
     VisitCallback
 } from '../internal';
-import {StorageAdapterBase , StorageAdapterCacheContext } from 'Storage/StorageAdapterBase';
 import * as timeUtils from '../Utilities/timeUtils';
+import { StringUtils } from '../Utilities/StringUtils';
 
 /**
  * The object model implementation for local entity declaration.
  */
 export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase implements CdmFileStatus, CdmEntityDeclarationDefinition {
+    private TAG: string = CdmLocalEntityDeclarationDefinition.name;
+
     /**
      * @inheritdoc
      */
@@ -36,6 +46,7 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
 
     /**
      * @inheritdoc
+     * Note: Use setLastFileModifiedTime() for setting the value.
      */
     public lastFileStatusCheckTime: Date;
 
@@ -49,6 +60,14 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
      */
     public lastChildFileModifiedTime: Date;
 
+    /**
+     * @inheritdoc
+     * Gets and sets this entity's virtual location, it's model.json file's location if entity is from a model.json file
+     */
+    public virtualLocation: string;
+
+    private lastFileModifiedOldTime: Date;
+
     public static get objectType(): cdmObjectType {
         return cdmObjectType.localEntityDeclarationDef;
     }
@@ -56,6 +75,10 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
     public readonly dataPartitions: CdmCollection<CdmDataPartitionDefinition>;
 
     public readonly dataPartitionPatterns: CdmCollection<CdmDataPartitionPatternDefinition>;
+
+    public readonly incrementalPartitions: CdmCollection<CdmDataPartitionDefinition>;
+
+    public readonly incrementalPartitionPatterns: CdmCollection<CdmDataPartitionPatternDefinition>;
 
     /**
      * Initializes a new instance of the LocalEntityDeclarationImpl.
@@ -68,6 +91,10 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
         this.entityName = entityName;
         this.dataPartitions = new CdmCollection<CdmDataPartitionDefinition>(this.ctx, this, cdmObjectType.dataPartitionDef);
         this.dataPartitionPatterns = new CdmCollection<CdmDataPartitionPatternDefinition>(this.ctx, this, cdmObjectType.dataPartitionDef);
+        this.incrementalPartitions = new CdmCollection<CdmDataPartitionDefinition>(this.ctx, this, cdmObjectType.dataPartitionDef);
+        this.incrementalPartitionPatterns = new CdmCollection<CdmDataPartitionPatternDefinition>(this.ctx, this, cdmObjectType.dataPartitionDef);
+        this.lastFileModifiedTime = undefined;
+        this.lastFileModifiedOldTime = undefined;
     }
 
     /**
@@ -82,13 +109,8 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
      */
     public validate(): boolean {
         if (!this.entityName) {
-            Logger.error(
-                CdmLocalEntityDeclarationDefinition.name,
-                this.ctx,
-                Errors.validateErrorString(this.atCorpusPath, ['entityName']),
-                this.validate.name
-            );
-
+            let missingFields: string[] = ['entityName'];
+            Logger.error(this.ctx, this.TAG, this.validate.name, this.atCorpusPath, cdmLogCode.ErrValdnIntegrityCheckFailure, missingFields.map((s: string) => `'${s}'`).join(', '), this.atCorpusPath);
             return false;
         }
 
@@ -108,22 +130,32 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
             copy = new CdmLocalEntityDeclarationDefinition(this.ctx, this.entityName);
         } else {
             copy = host as CdmLocalEntityDeclarationDefinition;
-            copy.ctx = this.ctx;
             copy.entityName = this.entityName;
             copy.dataPartitionPatterns.clear();
             copy.dataPartitions.clear();
+            copy.incrementalPartitionPatterns.clear();
+            copy.incrementalPartitions.clear();
         }
         copy.entityPath = this.entityPath;
         copy.lastFileStatusCheckTime = this.lastFileStatusCheckTime;
         copy.lastFileModifiedTime = this.lastFileModifiedTime;
         copy.lastChildFileModifiedTime = this.lastChildFileModifiedTime;
+        copy.virtualLocation = this.virtualLocation;
 
         for (const partition of this.dataPartitions) {
-            copy.dataPartitions.push(partition);
+            copy.dataPartitions.push(partition.copy(resOpt) as CdmDataPartitionDefinition);
         }
 
         for (const pattern of this.dataPartitionPatterns) {
-            copy.dataPartitionPatterns.push(pattern);
+            copy.dataPartitionPatterns.push(pattern.copy(resOpt) as CdmDataPartitionPatternDefinition);
+        }
+
+        for (const partition of this.incrementalPartitions) {
+            copy.incrementalPartitions.push(partition.copy(resOpt) as CdmDataPartitionDefinition);
+        }
+
+        for (const pattern of this.incrementalPartitionPatterns) {
+            copy.incrementalPartitionPatterns.push(pattern.copy(resOpt) as CdmDataPartitionPatternDefinition);
         }
         this.copyDef(resOpt, copy);
 
@@ -141,14 +173,7 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
      * @inheritdoc
      */
     public visit(pathFrom: string, preChildren: VisitCallback, postChildren: VisitCallback): boolean {
-        let path: string = '';
-        if (!this.ctx.corpus.blockDeclaredPathChanges) {
-            path = this.declaredPath;
-            if (!path) {
-                path = `${pathFrom}${this.entityName}`;
-                this.declaredPath = path;
-            }
-        }
+        const path: string = this.fetchDeclaredPath(pathFrom);
 
         if (preChildren && preChildren(this, path)) {
             return false;
@@ -166,12 +191,24 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
             }
         }
 
+        if (this.incrementalPartitions) {
+            if (this.incrementalPartitions.visitArray(`${path}/incrementalPartitions/`, preChildren, postChildren)) {
+                return true;
+            }
+        }
+
+        if (this.incrementalPartitionPatterns) {
+            if (this.incrementalPartitionPatterns.visitArray(`${path}/incrementalPartitionPatterns/`, preChildren, postChildren)) {
+                return true;
+            }
+        }
+
         if (this.visitDef(path, preChildren, postChildren)) {
             return true;
         }
 
         if (postChildren && postChildren(this, path)) {
-            return false;
+            return true;
         }
 
         return false;
@@ -187,32 +224,131 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
     /**
      * @inheritdoc
      */
-    public async fileStatusCheckAsync(): Promise<void> {
+    public isVirtual(): boolean {
+        return !StringUtils.isNullOrWhiteSpace(this.virtualLocation);
+    }
 
-        let adapter: StorageAdapterBase = this.ctx.corpus.storage.fetchAdapter(this.inDocument.namespace) as StorageAdapterBase;
-        let cacheContext: StorageAdapterCacheContext = (adapter != null) ? adapter.createFileQueryCacheContext() : null;
+    /**
+     * @inheritdoc
+     */
+    public async fileStatusCheckAsync(
+        partitionCheckType: partitionFileStatusCheckType = partitionFileStatusCheckType.Full,
+        incrementalType: cdmIncrementalPartitionType = cdmIncrementalPartitionType.None,
+        fileStatusCheckOptions: fileStatusCheckOptions = undefined
+    ): Promise<void> {
+        await this.fileStatusCheckAsyncInternal(partitionCheckType, incrementalType, fileStatusCheckOptions);
+    }
+
+    /**
+     * @internal
+     */
+    public async fileStatusCheckAsyncInternal(
+        partitionCheckType: partitionFileStatusCheckType = partitionFileStatusCheckType.Full,
+        incrementalType: cdmIncrementalPartitionType = cdmIncrementalPartitionType.None,
+        fileStatusCheckOptions: fileStatusCheckOptions = undefined
+    ): Promise<boolean> {
+
+        let adapter: StorageAdapterBase = this.ctx.corpus.storage.fetchAdapter(this.inDocument.namespace);
+        let cacheContext: StorageAdapterCacheContext = (adapter !== undefined) ? adapter.createFileQueryCacheContext() : undefined;
         try {
             const fullPath: string = this.ctx.corpus.storage.createAbsoluteCorpusPath(this.entityPath, this.inDocument);
-            const modifiedTime: Date = await this.ctx.corpus.computeLastModifiedTimeAsync(fullPath, this);
+            const modifiedTime: Date = this.isVirtual() ? await this.ctx.corpus.getLastModifiedTimeFromObjectAsync(this)
+                : await this.ctx.corpus.computeLastModifiedTimeAsync(fullPath, this);
 
-            for (const pattern of this.dataPartitionPatterns) {
-                await pattern.fileStatusCheckAsync();
+            // check patterns first as this is a more performant way of querying file modification times 
+            // from ADLS and we can cache the times for reuse in the individual partition checks below
+            if (partitionCheckType === partitionFileStatusCheckType.Full || partitionCheckType === partitionFileStatusCheckType.FullAndIncremental) {
+                for (const pattern of this.dataPartitionPatterns) {
+                    if (pattern.isIncremental) {
+                        Logger.error(pattern.ctx, this.TAG, this.fileStatusCheckAsync.name, pattern.atCorpusPath, cdmLogCode.ErrUnexpectedIncrementalPartitionTrait,
+                            CdmDataPartitionPatternDefinition.name, pattern.fetchObjectDefinitionName(), constants.INCREMENTAL_TRAIT_NAME, 'dataPartitionPatterns');
+                    } else {
+                        const shouldContinue: boolean = await pattern.fileStatusCheckAsyncInternal(fileStatusCheckOptions);
+
+                        if (!shouldContinue) {
+                            return false;
+                        }
+                    }
+                }
+
+                for (const partition of this.dataPartitions) {
+                    if (partition.isIncremental) {
+                        Logger.error(partition.ctx, this.TAG, this.fileStatusCheckAsync.name, partition.atCorpusPath, cdmLogCode.ErrUnexpectedIncrementalPartitionTrait,
+                            CdmDataPartitionDefinition.name, partition.fetchObjectDefinitionName(), constants.INCREMENTAL_TRAIT_NAME, 'dataPartitions');
+                    } else {
+                        await partition.fileStatusCheckAsync(fileStatusCheckOptions);
+                    }
+                }
             }
 
-            for (const partition of this.dataPartitions) {
-                await partition.fileStatusCheckAsync();
+            if (partitionCheckType === partitionFileStatusCheckType.Incremental || partitionCheckType === partitionFileStatusCheckType.FullAndIncremental) {
+                for (const pattern of this.incrementalPartitionPatterns) {
+                    if (this.shouldCallFileStatusCheck(incrementalType, true, pattern)) {
+                        await pattern.fileStatusCheckAsync();
+                    }
+                }
+
+                for (const partition of this.incrementalPartitions) {
+                    if (this.shouldCallFileStatusCheck(incrementalType, false, partition)) {
+                        await partition.fileStatusCheckAsync();
+                    }
+                }
             }
 
             this.lastFileStatusCheckTime = new Date();
-            this.lastFileModifiedTime = timeUtils.maxTime(modifiedTime, this.lastFileModifiedTime);
+            this.setLastFileModifiedTime(timeUtils.maxTime(modifiedTime, this.lastFileModifiedTime));
 
             await this.reportMostRecentTimeAsync(this.lastFileModifiedTime);
         }
         finally {
-            if(cacheContext != null) {
+            if (cacheContext !== undefined) {
                 cacheContext.dispose()
             }
         }
+
+        return true;
+    }
+
+    /**
+     * @internal
+     * Determine if calling FileStatusCheckAsync on the given pattern or the given partition is needed.
+     */
+    public shouldCallFileStatusCheck(incrementalType: cdmIncrementalPartitionType, isPattern: boolean, patternOrPartitionObj: CdmObjectDefinitionBase): boolean {
+        var update = true;
+
+        var traitRef: CdmTraitReference = patternOrPartitionObj.exhibitsTraits.item(constants.INCREMENTAL_TRAIT_NAME) as CdmTraitReference;
+        if (traitRef === undefined) {
+            Logger.error(patternOrPartitionObj.ctx, this.TAG, this.shouldCallFileStatusCheck.name, patternOrPartitionObj.atCorpusPath, cdmLogCode.ErrMissingIncrementalPartitionTrait,
+                isPattern ? CdmDataPartitionPatternDefinition.name : CdmDataPartitionDefinition.name, patternOrPartitionObj.fetchObjectDefinitionName(),
+                constants.INCREMENTAL_TRAIT_NAME, isPattern ? 'incrementalPartitionPatterns' : 'incrementalPartitions');
+        } else {
+            // None means update by default
+            if (incrementalType == cdmIncrementalPartitionType.None) {
+                return update;
+            }
+            var traitRefIncrementalTypeValue = traitRef.arguments?.fetchValue('type');
+            if (traitRefIncrementalTypeValue === undefined) {
+                update = false;
+                Logger.error(patternOrPartitionObj.ctx, this.TAG, this.shouldCallFileStatusCheck.name, patternOrPartitionObj.atCorpusPath, cdmLogCode.ErrTraitArgumentMissing,
+                    'type', constants.INCREMENTAL_TRAIT_NAME, patternOrPartitionObj.fetchObjectDefinitionName());
+            } else if (typeof traitRefIncrementalTypeValue !== 'string') {
+                update = false;
+                Logger.error(patternOrPartitionObj.ctx, this.TAG, this.shouldCallFileStatusCheck.name, patternOrPartitionObj.atCorpusPath, cdmLogCode.ErrTraitInvalidArgumentValueType,
+                    'type', constants.INCREMENTAL_TRAIT_NAME, patternOrPartitionObj.fetchObjectDefinitionName());
+            } else {
+                const traitRefIncrementalTypeValueStr = traitRefIncrementalTypeValue.toString()
+                if (Object.values(cdmIncrementalPartitionType).includes(traitRefIncrementalTypeValueStr)) {
+                    update = cdmIncrementalPartitionType[traitRefIncrementalTypeValueStr as unknown as keyof cdmIncrementalPartitionType] === incrementalType;
+                } else {
+                    update = false;
+                    Logger.error(patternOrPartitionObj.ctx, this.TAG, this.shouldCallFileStatusCheck.name, patternOrPartitionObj.atCorpusPath, cdmLogCode.ErrEnumConversionFailure,
+                        traitRefIncrementalTypeValue, 'cdmIncrementalPartitionType',
+                        `'parameter 'type' of trait '${constants.INCREMENTAL_TRAIT_NAME}' from '${patternOrPartitionObj.fetchObjectDefinitionName()}'`);
+                }
+            }
+        }
+
+        return update;
     }
 
     /**
@@ -231,30 +367,58 @@ export class CdmLocalEntityDeclarationDefinition extends CdmObjectDefinitionBase
     /**
      * @internal
      * Creates a data partition object using the input, should be called by DataPartitionPattern object
+     * This function doesn't check if the data partition exists.
      */
     public createDataPartitionFromPattern(
         filePath: string,
         exhibitsTraits: CdmTraitCollection,
         args: Map<string, string[]>,
         schema: string,
-        modifiedTime: Date): void {
-        const existingPartition: CdmDataPartitionDefinition =
-            this.dataPartitions.allItems.find((x: CdmDataPartitionDefinition) => x.location === filePath);
+        modifiedTime: Date,
+        isIncrementalPartition: boolean = false,
+        incrementPartitionPatternName: string = undefined): void {
+        const newPartition: CdmDataPartitionDefinition = this.ctx.corpus.MakeObject(cdmObjectType.dataPartitionDef);
+        newPartition.location = filePath;
 
-        if (!existingPartition) {
-            const newPartition: CdmDataPartitionDefinition = this.ctx.corpus.MakeObject(cdmObjectType.dataPartitionDef);
-            newPartition.location = filePath;
-            newPartition.specializedSchema = schema;
-            newPartition.lastFileModifiedTime = modifiedTime;
-            newPartition.lastFileStatusCheckTime = new Date();
+        newPartition.specializedSchema = schema;
+        newPartition.lastFileModifiedTime = modifiedTime;
+        newPartition.lastFileStatusCheckTime = new Date();
 
-            for (const trait of exhibitsTraits) {
-                newPartition.exhibitsTraits.push(trait);
-            }
-
-            newPartition.arguments = new Map(args);
-
-            this.dataPartitions.push(newPartition);
+        for (const trait of exhibitsTraits) {
+            newPartition.exhibitsTraits.push(trait.copy() as CdmTraitReferenceBase);
         }
+
+        newPartition.arguments = new Map(args);
+
+        if (!isIncrementalPartition) {
+            this.dataPartitions.push(newPartition);
+        } else {
+            if (!StringUtils.isNullOrWhiteSpace(incrementPartitionPatternName)) {
+                (newPartition.exhibitsTraits.item(constants.INCREMENTAL_TRAIT_NAME) as CdmTraitReference).arguments.push(constants.INCREMENTAL_PATTERN_PARAMETER_NAME, incrementPartitionPatternName);
+            }
+            this.incrementalPartitions.push(newPartition)
+        }
+
+    }
+
+    public setLastFileModifiedTime(value: Date): void {
+        this.setLastFileModifiedOldTime(this.lastFileModifiedTime);
+        this.lastFileModifiedTime = value;
+    }
+
+    public getlastFileModifiedTime(): Date {
+        return this.lastFileModifiedTime;
+    }
+
+    private setLastFileModifiedOldTime(value: Date): void {
+        this.lastFileModifiedOldTime = value;
+    }
+
+    public getlastFileModifiedOldTime(): Date {
+        return this.lastFileModifiedOldTime;
+    }
+
+    public resetLastFileModifiedOldTime(): void {
+        this.setLastFileModifiedOldTime(undefined);
     }
 }

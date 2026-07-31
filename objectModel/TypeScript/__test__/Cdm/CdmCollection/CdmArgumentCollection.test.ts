@@ -5,7 +5,8 @@ import { CdmLocalEntityDeclarationDefinition } from '../../../Cdm/CdmLocalEntity
 import {
     CdmArgumentDefinition,
     CdmManifestDefinition,
-    CdmTraitReference
+    CdmTraitReference,
+    CdmTraitReferenceBase
 } from '../../../internal';
 import { generateManifest } from './CdmCollectionHelperFunctions';
 
@@ -79,7 +80,7 @@ describe('Cdm/CdmCollection/CdmArgumentCollection', () => {
 
         argList.push(argumentDefinition);
 
-        const valOfArg2: CdmManifestDefinition = generateManifest('C:\\Nothing');
+        const valOfArg2: CdmManifestDefinition = generateManifest();
         argumentDefinition = new CdmArgumentDefinition(trait.ctx, undefined);
         argumentDefinition.name = 'arg2';
         argumentDefinition.value = valOfArg2;
@@ -94,13 +95,13 @@ describe('Cdm/CdmCollection/CdmArgumentCollection', () => {
             .toEqual(false);
         expect(trait.arguments.allItems[0].name)
             .toEqual('Arg1');
-        expect(trait.arguments.allItems[0].value)
+        expect(trait.arguments.item('Arg1').value)
             .toEqual('123');
         expect(trait.arguments.allItems[0].owner)
             .toEqual(trait);
         expect(trait.arguments.allItems[1].name)
             .toEqual('arg2');
-        expect(trait.arguments.allItems[1].value)
+        expect(trait.arguments.item('arg2').value)
             .toEqual(valOfArg2);
         expect(trait.arguments.allItems[1].owner)
             .toEqual(trait);
@@ -153,10 +154,10 @@ describe('Cdm/CdmCollection/CdmArgumentCollection', () => {
     });
 
     it('TestCdmCollectionAddPopulatesInDocumentWithVisit', () => {
-        const manifest: CdmManifestDefinition = generateManifest('C:/nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
         const entityReference: CdmLocalEntityDeclarationDefinition = new CdmLocalEntityDeclarationDefinition(manifest.ctx, 'entityName');
-        const trait: CdmTraitReference = entityReference.exhibitsTraits.push('theTrait');
-        const argument: CdmArgumentDefinition = trait.arguments.push('GreatArgumentName', 'GreatValue');
+        const trait: CdmTraitReferenceBase = entityReference.exhibitsTraits.push('theTrait');
+        const argument: CdmArgumentDefinition = (trait as CdmTraitReference).arguments.push('GreatArgumentName', 'GreatValue');
         manifest.entities.push(entityReference);
 
         expect(manifest)
@@ -170,7 +171,7 @@ describe('Cdm/CdmCollection/CdmArgumentCollection', () => {
     });
 
     function generateTrait(): CdmTraitReference {
-        const manifest: CdmManifestDefinition = generateManifest('C:\\Nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
 
         return new CdmTraitReference(manifest.ctx, 'traitName', false, false);
     }

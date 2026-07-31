@@ -1,4 +1,5 @@
 {
+  "documentVersion": "1.4",
   "jsonSchemaSemanticVersion": "1.0.0",
   "imports": [
     {
@@ -47,7 +48,7 @@
           "arguments": [
             {
               "name": "versionNumber",
-              "value": "1.2"
+              "value": "1.4"
             }
           ]
         }
@@ -861,17 +862,20 @@
                               [
                                 "en",
                                 "Time",
-                                "972230000"
+                                "972230000",
+                                "0"
                               ],
                               [
                                 "en",
                                 "Value",
-                                "972230001"
+                                "972230001",
+                                "1"
                               ],
                               [
                                 "en",
                                 "Per",
-                                "972230002"
+                                "972230002",
+                                "2"
                               ]
                             ]
                           }

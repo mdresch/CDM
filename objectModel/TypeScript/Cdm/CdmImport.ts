@@ -7,19 +7,28 @@ import {
     CdmObject,
     cdmObjectSimple,
     cdmObjectType,
-    Errors,
+    cdmLogCode,
     Logger,
     resolveOptions,
+    StringUtils,
     VisitCallback
 } from '../internal';
 
 export class CdmImport extends cdmObjectSimple {
+    private TAG: string = CdmImport.name;
+
     public corpusPath: string;
     public moniker: string;
     /**
      * @internal
      */
     public document: CdmDocumentDefinition;
+
+    /**
+     * Used when creating a copy of an import to figure out the new corpus path.
+     * @internal
+     */
+    public previousOwner: CdmObject;
 
     public static get objectType(): cdmObjectType {
         return cdmObjectType.import;
@@ -60,24 +69,24 @@ export class CdmImport extends cdmObjectSimple {
                 copy.corpusPath = this.corpusPath;
                 copy.moniker = this.moniker;
             }
-            copy.document = this.document;
+            copy.document = this.document ? this.document.copy(resOpt) as CdmDocumentDefinition : undefined;
+            copy.previousOwner = this.owner;
 
             return copy;
         }
         // return p.measure(bodyCode);
     }
 
+    public fetchObjectDefinitionName(): string {
+        return undefined;
+    }
+    
     public validate(): boolean {
         // let bodyCode = () =>
         {
             if (!this.corpusPath) {
-                Logger.error(
-                    CdmImport.name,
-                    this.ctx,
-                    Errors.validateErrorString(this.atCorpusPath, ['corpusPath']),
-                    this.validate.name
-                );
-
+                let missingFields: string[] = ['corpusPath'];
+                Logger.error(this.ctx, this.TAG, this.validate.name, this.atCorpusPath, cdmLogCode.ErrValdnIntegrityCheckFailure, missingFields.map((s: string) => `'${s}'`).join(', '), this.atCorpusPath);
                 return false;
             }
 

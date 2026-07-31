@@ -1,10 +1,11 @@
 {
+  "documentVersion": "2.0",
   "$schema": "./schema.cdm.json",
   "jsonSchemaSemanticVersion": "1.0.0",
   "explanation": "Business concepts and ideas",
   "imports": [
     {
-      "uri": "/primitives.cdm.json"
+      "corpusPath": "/primitives.cdm.json"
     }
   ],
   "definitions": [
@@ -70,7 +71,7 @@
     },
     {
       "traitName": "means.idea.company",
-      "extendsTrait": "means.idea"
+      "extendsTrait": "means.idea.organization"
     },
     {
       "traitName": "means.idea.competitor",
@@ -122,6 +123,10 @@
     },
     {
       "traitName": "means.idea.email",
+      "extendsTrait": "means.idea"
+    },
+    {
+      "traitName": "means.idea.employer",
       "extendsTrait": "means.idea"
     },
     {
@@ -333,18 +338,6 @@
     {
       "traitName": "means.category",
       "extendsTrait": "means"
-    },
-    {
-      "traitName": "means.relationship",
-      "extendsTrait": "means"
-    },
-    {
-      "traitName": "means.relationship.parent",
-      "extendsTrait": "means.relationship"
-    },
-    {
-      "traitName": "means.relationship.child",
-      "extendsTrait": "means.relationship"
     },
     {
       "traitName": "means.reference",

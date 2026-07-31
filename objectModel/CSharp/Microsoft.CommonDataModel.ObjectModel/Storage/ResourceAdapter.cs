@@ -1,24 +1,29 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Storage
 {
     using System;
-    using System.Collections.Generic;
     using System.IO;
     using System.Reflection;
     using System.Text;
     using System.Threading.Tasks;
 
     /// <summary>
-    /// The resource adapter, enables the access to the files that are marked as embedded resources.
+    /// The resource adapter.
     /// </summary>
+    [Obsolete("Resource Adapter is deprecated. Please install and use Microsoft.CommonDataModel.ObjectModel.Adapter.CdmStandards.")]
     public class ResourceAdapter : StorageAdapterBase
     {
         /// <summary>
         /// The resource path root (every path will have this as a start).
         /// </summary>
-        private readonly string root = "Microsoft.CommonDataModel.ObjectModel.Resources";
+        private string root = "Resources";
+
+        public ResourceAdapter()
+        {
+            this.root = $"{this.GetType().Assembly.GetName().Name}.{this.root}";
+        }
 
         public override bool CanRead()
         {
@@ -62,16 +67,9 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
                 throw new Exception($"There is no resource found for {corpusPath}.");
             }
 
-            try
+            using (var reader = new StreamReader(resourceStream, Encoding.UTF8))
             {
-                using (var reader = new StreamReader(resourceStream, Encoding.UTF8))
-                {
-                    return await reader.ReadToEndAsync();
-                }
-            }
-            catch (Exception exception)
-            {
-                throw new Exception($"There was an issue while reading file at {corpusPath}. Exception: {exception.Message.ToString()}");
+                return await reader.ReadToEndAsync();
             }
         }
     }

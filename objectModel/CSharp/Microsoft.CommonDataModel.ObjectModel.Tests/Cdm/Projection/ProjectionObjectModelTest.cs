@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm
+namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Projection
 {
     using Microsoft.CommonDataModel.ObjectModel.Cdm;
     using Microsoft.CommonDataModel.ObjectModel.Enums;
@@ -300,21 +300,21 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm
                 // AddCountAttribute Operation
                 CdmOperationAddCountAttribute addCountAttributeOp = new CdmOperationAddCountAttribute(corpus.Ctx)
                 {
-                    CountAttribute = corpus.MakeObject<CdmTypeAttributeDefinition>(CdmObjectType.TypeAttributeDef)
+                    CountAttribute = corpus.MakeObject<CdmTypeAttributeDefinition>(CdmObjectType.TypeAttributeDef, "countAtt")
                 };
                 projection.Operations.Add(addCountAttributeOp);
 
                 // AddSupportingAttribute Operation
                 CdmOperationAddSupportingAttribute addSupportingAttributesOp = new CdmOperationAddSupportingAttribute(corpus.Ctx)
                 {
-                    SupportingAttribute = corpus.MakeObject<CdmTypeAttributeDefinition>(CdmObjectType.TypeAttributeDef)
+                    SupportingAttribute = corpus.MakeObject<CdmTypeAttributeDefinition>(CdmObjectType.TypeAttributeDef, "supportingAtt")
                 };
                 projection.Operations.Add(addSupportingAttributesOp);
 
                 // AddTypeAttribute Operation
                 CdmOperationAddTypeAttribute addTypeAttributeOp = new CdmOperationAddTypeAttribute(corpus.Ctx)
                 {
-                    TypeAttribute = corpus.MakeObject<CdmTypeAttributeDefinition>(CdmObjectType.TypeAttributeDef)
+                    TypeAttribute = corpus.MakeObject<CdmTypeAttributeDefinition>(CdmObjectType.TypeAttributeDef, "typeAtt")
                 };
                 projection.Operations.Add(addTypeAttributeOp);
 
@@ -338,7 +338,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm
                 CdmOperationCombineAttributes combineAttributesOp = new CdmOperationCombineAttributes(corpus.Ctx)
                 {
                     Select = new List<string>(),
-                    MergeInto = corpus.MakeObject<CdmTypeAttributeDefinition>(CdmObjectType.TypeAttributeDef)
+                    MergeInto = corpus.MakeObject<CdmTypeAttributeDefinition>(CdmObjectType.TypeAttributeDef, "combineAtt")
                 };
                 combineAttributesOp.Select.Add("testAttribute1");
                 projection.Operations.Add(combineAttributesOp);

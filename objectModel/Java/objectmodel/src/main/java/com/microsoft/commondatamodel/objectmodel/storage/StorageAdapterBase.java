@@ -3,8 +3,13 @@
 
 package com.microsoft.commondatamodel.objectmodel.storage;
 
+import com.microsoft.commondatamodel.objectmodel.cdm.CdmCorpusContext;
+import com.microsoft.commondatamodel.objectmodel.utilities.CdmFileMetadata;
+import com.microsoft.commondatamodel.objectmodel.utilities.exceptions.CdmReadPartitionFromPatternException;
+
 import java.io.IOException;
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.HashSet;  
@@ -15,9 +20,28 @@ import java.util.HashSet;
   * to manually copy data to the location where the Object Model is running. By deriving from this 
   * this class, users can to create their own adapter if needed.
  */
-public abstract class StorageAdapterBase implements StorageAdapter {
+public abstract class StorageAdapterBase {
+
+  /**
+   * The CDM corpus context, gives information for the logger.
+   */
+  private CdmCorpusContext ctx;
 
   private String locationHint = "";
+
+  /**
+   * Gets the CDM corpus context.
+   */
+  protected CdmCorpusContext getCtx() {
+    return ctx;
+  }
+
+  /**
+   * Sets the CDM corpus context.
+   */
+  protected void setCtx(final CdmCorpusContext ctx) {
+     this.ctx = ctx;
+  }
 
   /**
    * The location hint, gives a hint to the reader app about the location where the adapter
@@ -105,14 +129,45 @@ public abstract class StorageAdapterBase implements StorageAdapter {
   }
 
   /**
+   * Returns the file metadata info about the specified document.
+   * @param corpusPath The path to the document.
+   * @return the Cdm File Metadata of the document
+   */
+  public CompletableFuture<CdmFileMetadata> fetchFileMetadataAsync(String corpusPath) {
+    return CompletableFuture.completedFuture(null);
+  }
+
+  /**
+   * @deprecated Deprecated in favor of fetchAllFilesMetadataAsync
+   * meant to be called externally at all. Please refrain from using it.
    * Returns a list of corpus paths to all files and folders at or under the provided corpus path to
    * a folder.
    *
    * @param folderCorpusPath Path to the folder to scan
    * @return List of corpus paths of all files and folders found
    */
+  @Deprecated
   public CompletableFuture<List<String>> fetchAllFilesAsync(String folderCorpusPath) {
     return CompletableFuture.completedFuture(null);
+  }
+
+  /**
+   * Returns a list of corpus paths to all files and folders at or under the provided corpus path to a folder.
+   * @param folderCorpusPath Path to the folder to scan
+   * @return Dictionary with list of corpus paths as keys and CdmFileMetadata info for each as the value
+   */
+  public CompletableFuture<HashMap<String, CdmFileMetadata>> fetchAllFilesMetadataAsync(String folderCorpusPath) throws CdmReadPartitionFromPatternException {
+    List<String> allFiles = this.fetchAllFilesAsync(folderCorpusPath).join();
+
+    HashMap<String, CdmFileMetadata> filesMetadata = new HashMap<String, CdmFileMetadata>();
+
+    if (allFiles != null) {
+      for (final String file : allFiles) {
+        filesMetadata.put(file, null);
+      }
+    }
+
+    return CompletableFuture.completedFuture(filesMetadata);
   }
 
   /**

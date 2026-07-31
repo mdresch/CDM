@@ -10,7 +10,7 @@ from .cdm_object_simple import CdmObjectSimple
 
 if TYPE_CHECKING:
     from cdm.objectmodel import CdmCorpusContext, CdmTypeAttributeDefinition
-    from cdm.utilities import FriendlyFormatNode, VisitCallback
+    from cdm.utilities import VisitCallback
 
 
 class CdmAttributeResolutionGuidance_Expansion:
@@ -93,6 +93,8 @@ class CdmAttributeResolutionGuidanceDefinition(CdmObjectSimple):
         # If the 'structured' directive is set, this trait causes resolved attributes to end up in groups rather than a flattend list
         self.selects_sub_attribute = None  # type: Optional[CdmAttributeResolutionGuidance_SelectsSubAttribute]
 
+    def fetch_object_definition_name(self) -> Optional[str]:
+       return None
     @property
     def object_type(self) -> CdmObjectType:
         return CdmObjectType.ATTRIBUTE_RESOLUTION_GUIDANCE_DEF
@@ -229,7 +231,7 @@ class CdmAttributeResolutionGuidanceDefinition(CdmObjectSimple):
             copy.imposed_directives = self.imposed_directives[:]
         if self.removed_directives:
             copy.removed_directives = self.removed_directives[:]
-        copy.add_supporting_attribute = self.add_supporting_attribute
+        copy.add_supporting_attribute = self.add_supporting_attribute.copy(res_opt) if self.add_supporting_attribute else None
         copy.cardinality = self.cardinality
         copy.rename_format = self.rename_format
 
@@ -255,7 +257,7 @@ class CdmAttributeResolutionGuidanceDefinition(CdmObjectSimple):
 
         return copy
 
-    def _update_attribute_defaults(self, att_name: str) -> None:
+    def _update_attribute_defaults(self, att_name: str, owner: 'CdmObject') -> None:
         # handle the cardinality and expansion group.
         # default is one, but if there is some hint of an array, make it work
 
@@ -276,8 +278,9 @@ class CdmAttributeResolutionGuidanceDefinition(CdmObjectSimple):
                 self.expansion.maximum_expansion = 5
 
             if self.expansion.count_attribute is None:
-                self.expansion.count_attribute = self.ctx.corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF, 'count')
-                self.expansion.count_attribute.data_type = self.ctx.corpus.make_object(CdmObjectType.DATA_TYPE_REF, 'integer', True)
+                self.expansion.count_attribute = self.ctx.corpus._fetch_artifact_attribute('count')
+                self.expansion.count_attribute.owner = owner
+                self.expansion.count_attribute.in_document = owner.in_document
 
         # entity by ref. anything mentioned?
         if self.entity_by_reference:
@@ -287,12 +290,11 @@ class CdmAttributeResolutionGuidanceDefinition(CdmObjectSimple):
             if self.entity_by_reference.allow_reference:
                 if self.entity_by_reference.always_include_foreign_key is None:
                     self.entity_by_reference.always_include_foreign_key = False
-                if self.entity_by_reference.reference_only_after_depth is None:
-                    self.entity_by_reference.reference_only_after_depth = 2
                 if self.entity_by_reference.foreign_key_attribute is None:
                     # make up a fk
-                    self.entity_by_reference.foreign_key_attribute = self.ctx.corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF, 'id')
-                    self.entity_by_reference.foreign_key_attribute.data_type = self.ctx.corpus.make_object(CdmObjectType.DATA_TYPE_REF, 'entityId', True)
+                    self.entity_by_reference.foreign_key_attribute = self.ctx.corpus._fetch_artifact_attribute('id')
+                    self.entity_by_reference.foreign_key_attribute.owner = owner
+                    self.entity_by_reference.foreign_key_attribute.in_document = owner.in_document
 
         # selects one>
         if self.selects_sub_attribute:
@@ -300,9 +302,10 @@ class CdmAttributeResolutionGuidanceDefinition(CdmObjectSimple):
                 self.selects_sub_attribute.selects = 'one'
             if self.selects_sub_attribute.selects == 'one':
                 if self.selects_sub_attribute.selected_type_attribute is None:
-                    # make up a fk
-                    self.selects_sub_attribute.selected_type_attribute = self.ctx.corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF, 'type')
-                    self.selects_sub_attribute.selected_type_attribute.data_type = self.ctx.corpus.make_object(CdmObjectType.DATA_TYPE_REF, 'entityName', True)
+                    # make up a type indicator
+                    self.selects_sub_attribute.selected_type_attribute = self.ctx.corpus._fetch_artifact_attribute('type')
+                    self.selects_sub_attribute.selected_type_attribute.owner = owner
+                    self.selects_sub_attribute.selected_type_attribute.in_document = owner.in_document
 
         # only set a rename format if one is needed for arrays or added atts
         if self.rename_format is None:

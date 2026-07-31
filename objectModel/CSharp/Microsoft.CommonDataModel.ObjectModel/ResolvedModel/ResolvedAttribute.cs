@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
@@ -20,8 +20,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
             {
                 if (value != null)
                 {
-                    if (value is CdmAttribute)
-                        this.ResolvedAttributeCount = value.AttributeCount;
+                    if (value is CdmAttribute attribute)
+                        this.ResolvedAttributeCount = attribute.AttributeCount;
                     else if (value is ResolvedAttributeSet)
                         this.ResolvedAttributeCount = value.ResolvedAttributeCount;
                 }
@@ -50,6 +50,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
         public CdmAttributeContext AttCtx { get; set; }
         public AttributeResolutionContext Arc { get; set; }
         public ApplierState ApplierState { get; set; }
+        public CdmEntityDefinition Owner { get; set; }
 
         public ResolvedAttribute(ResolveOptions resOpt, dynamic target, string defaultName, CdmAttributeContext attCtx)
         {
@@ -86,7 +87,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
                 ResolvedTraits = this.ResolvedTraits.ShallowCopy(),
                 InsertOrder = this.InsertOrder,
                 Arc = this.Arc,
-                AttCtx = this.AttCtx // set here instead of constructor to avoid setting lineage for this copy
+                AttCtx = this.AttCtx, // set here instead of constructor to avoid setting lineage for this copy
+                Owner = this.Owner
             };
 
             if (copy.Target is ResolvedAttributeSet)

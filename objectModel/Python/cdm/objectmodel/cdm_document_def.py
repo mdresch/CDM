@@ -1,47 +1,33 @@
 ﻿# Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
-
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 import warnings
 
+from cdm.enums import CdmLogCode
+
 from cdm.enums import CdmObjectType, ImportsLoadStrategy
-from cdm.utilities import CopyOptions, ImportInfo, logger, Errors, ResolveOptions
+from cdm.utilities import CopyOptions, ImportInfo, logger, ResolveOptions
 
 from .cdm_container_def import CdmContainerDefinition
 from .cdm_definition_collection import CdmDefinitionCollection
 from .cdm_import_collection import CdmImportCollection
 from .cdm_object_simple import CdmObjectSimple
+from .cdm_local_entity_declaration_def import CdmLocalEntityDeclarationDefinition
+from ._import_priorities import ImportPriorities
+from .cdm_object import CdmObject
 
 if TYPE_CHECKING:
-    from cdm.objectmodel import CdmCorpusContext, CdmDataTypeDefinition, CdmImport, CdmFolderDefinition, CdmObject, \
-        CdmObjectDefinition, CdmTraitDefinition
-    from cdm.utilities import FriendlyFormatNode, VisitCallback
-
-
-class ImportPriorities:
-    def __init__(self):
-        self.import_priority = {}  # type: Dict[CdmDocumentDefinition, ImportInfo]
-        self.moniker_priority_map = {}  # type: Dict[str, CdmDocumentDefinition]
-
-        # True if one of the document's imports import this document back.
-        # Ex.: A.cdm.json -> B.cdm.json -> A.cdm.json
-        self.has_circular_import = False # type: bool
-
-    def copy(self) -> 'ImportPriorities':
-        c = ImportPriorities()
-        if self.import_priority:
-            c.import_priority = self.import_priority.copy()
-        if self.moniker_priority_map:
-            c.moniker_priority_map = self.moniker_priority_map.copy()
-        c.has_circular_import = self.has_circular_import
-
-        return c
+    from cdm.objectmodel import CdmCorpusContext, CdmImport, CdmFolderDefinition, \
+    CdmObjectDefinition, CdmCorpusDefinition
+    from cdm.utilities import VisitCallback
 
 
 class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
     def __init__(self, ctx: 'CdmCorpusContext', name: str) -> None:
         super().__init__(ctx)
+
+        self._TAG = CdmDocumentDefinition.__name__
 
         # the document name.
         self.name = name  # type: str
@@ -51,42 +37,57 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
         # the document schema.
         self.schema = None  # type: Optional[str]
 
-        # the document json schema semantic version.
-        self.json_schema_semantic_version = '1.0.0'  # type: str
-        
+        # the document json schema semantic version. This is the default minimum version we will save, it may be set higher by a designer or during a save when making use of higher version features
+        self.json_schema_semantic_version = CdmObject.json_schema_semantic_version_minimum_save # type: str
+
         # the document version.
         self.document_version = None  # type: Optional[str]
 
-        # the document folder.
-        self.folder = None  # type: Optional[CdmFolderDefinition]
+        # --- internal ---
 
-        # The namespace where this object can be found
-        self.namespace = None  # type: Optional[str]
-
-        # The folder where this object exists
-        self.folder_path = None  # type: Optional[str]
-
-        # internal
         self._currently_indexing = False
         self._declarations_indexed = False
         self._file_system_modified_time = None  # type: Optional[datetime]
+        # The folder where this object exists
+        self._folder_path = None  # type: Optional[str]
         self._imports_indexed = False
         self._import_priorities = None  # type: Optional[ImportPriorities]
         self._is_dirty = True  # type: bool
+        # The namespace where this object can be found
+        self._namespace = None  # type: Optional[str]
         self._needs_indexing = True
         self._imports = CdmImportCollection(self.ctx, self)
         self._definitions = CdmDefinitionCollection(self.ctx, self)
         self._is_valid = True  # types: bool
-        self._TAG = CdmDocumentDefinition.__name__
 
-        self._clear_caches()
+        # A list of all objects contained by this document.
+        # Only using during indexing and cleared after indexing is done.
+        self._internal_objects = None  # type: Optional[List[CdmObject]]
 
     @property
     def at_corpus_path(self) -> str:
-        if self.folder is None:
+        if self.owner is None:
             return 'NULL:/{}'.format(self.name)
 
-        return self.folder.at_corpus_path + self.name
+        return self.owner.at_corpus_path + self.name
+
+    @property
+    def folder(self) -> Optional['CdmFolderDefinition']:
+        return self.owner
+
+    @folder.setter
+    def folder(self, folder: Optional['CdmFolderDefinition']):
+        self.owner = folder
+
+    @property
+    def folder_path(self) -> str:
+        warnings.warn('This property is likely to be removed soon.\nUse doc.owner._folder_path instead.', DeprecationWarning)
+        return self._folder_path
+
+    @property
+    def namespace(self) -> str:
+        warnings.warn('This property is likely to be removed soon.\nUse doc.owner.namespace instead.', DeprecationWarning)
+        return self._namespace
 
     @property
     def imports(self) -> 'CdmImportCollection':
@@ -106,6 +107,22 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
     @property
     def object_type(self) -> 'CdmObjectType':
         return CdmObjectType.DOCUMENT_DEF
+
+    def _discover_minimum_required_json_semantic_version(self):
+        """finds the highest required semantic version in the document and set it"""
+        # may return -1, that is fine            
+        max_version = CdmObject.semantic_version_string_to_number(self.json_schema_semantic_version); 
+
+        def callback(obj: 'CdmObject', obj_path: str) -> bool:
+            nonlocal max_version
+            obj_version = obj._get_minimum_semantic_version()
+            if obj_version > max_version:
+                max_version = obj_version
+            return False
+        self.visit('', callback, None)
+
+        self.json_schema_semantic_version = CdmObject.semantic_version_number_to_string(max_version)
+        return
 
     def _construct_resolved_attributes(self, res_opt: 'ResolveOptions', under: Optional['CdmAttributeContext']) -> 'ResolvedAttributeSetBuilder':
         return None
@@ -131,7 +148,7 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
 
         copy.in_document = copy
         copy._is_dirty = True
-        copy.folder_path = self.folder_path
+        copy._folder_path = self._folder_path
         copy.schema = self.schema
         copy.json_schema_semantic_version = self.json_schema_semantic_version
         copy.document_version = self.document_version
@@ -145,14 +162,15 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
         return copy
 
     async def _index_if_needed(self, res_opt: 'ResolveOptions', load_imports: bool = False) -> bool:
-        if not self._needs_indexing or self._currently_indexing:
-            return True
-
-        if not self.folder:
-            logger.error(self._TAG, self.ctx, 'Document \'{}\' is not in a folder'.format(self.name), self._index_if_needed.__name__)
+        if not self.owner:
+            logger.error(self.ctx, self._TAG, self._index_if_needed.__name__, self.at_corpus_path, CdmLogCode.ERR_VALDN_MISSING_DOC, self.name)
             return False
 
-        corpus = self.folder._corpus
+        corpus = self.owner._corpus  # type: CdmCorpusDefinition
+        needs_indexing = corpus._document_library._mark_document_for_indexing(self)
+
+        if not needs_indexing:
+            return True
 
         # if the imports load strategy is "LAZY_LOAD", loadImports value will be the one sent by the called function.
         if res_opt.imports_load_strategy == ImportsLoadStrategy.DO_NOT_LOAD:
@@ -160,13 +178,13 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
         elif res_opt.imports_load_strategy == ImportsLoadStrategy.LOAD:
             load_imports = True
 
+        # make the internal machinery pay attention to this document for this call.
+        docs_loading = { self.at_corpus_path }
+
         if load_imports:
-            await corpus._resolve_imports_async(self, res_opt)
+            await corpus._resolve_imports_async(self, docs_loading, res_opt)
 
-        # make the corpus internal machinery pay attention to this document for this call
-        corpus._document_library._mark_document_for_indexing(self)
-
-        return corpus._index_documents(res_opt, load_imports)
+        return corpus._index_documents(res_opt, load_imports, self, docs_loading)
 
     def _get_import_priorities(self) -> 'ImportPriorities':
         if not self._import_priorities:
@@ -179,6 +197,7 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
         return self._import_priorities.copy()
 
     def get_name(self) -> str:
+        warnings.warn('Property deprecated.', DeprecationWarning)
         return self.name
 
     def _fetch_object_from_document_path(self, object_path: str, res_opt: ResolveOptions) -> 'CdmObject':
@@ -197,9 +216,8 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
 
             # work backward until we find something in this document
             last_obj = object_path.rindex('/(object)')
-            this_doc_part = object_path
             while last_obj > 0:
-                this_doc_part = object_path[0, last_obj]
+                this_doc_part = object_path[0 : last_obj]
                 if this_doc_part in self.internal_declarations:
                     this_doc_obj_ref = self.internal_declarations.get(this_doc_part)
                     that_doc_obj_def = this_doc_obj_ref.fetch_object_definition(res_opt)
@@ -207,7 +225,7 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
                         # get from other document.
                         # but first fix the path to look like it is relative to that object as declared in that doc
                         that_doc_part = object_path[last_obj + len('/(object)')]
-                        that_doc_part = that_doc_obj_def.declared_path + that_doc_part
+                        that_doc_part = that_doc_obj_def._declared_path + that_doc_part
                         if that_doc_part == object_path:
                             # we got back to were we started. probably because something is just not found.
                             return None
@@ -216,12 +234,180 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
                 last_obj = this_doc_part.rindex('/(object)')
             return None
 
+    def _check_integrity(self) -> bool:
+        """Validates all the objects in this document."""
+        error_count = 0
+
+        for obj in self._internal_objects:
+            if not obj.validate():
+                error_count += 1
+            else:
+                obj.ctx = self.ctx
+
+            logger.debug(self.ctx, self._TAG, self._check_integrity.__name__, self.at_corpus_path,
+                        'checked \'{}\''.format(obj.at_corpus_path))
+
+        self._is_valid = error_count == 0
+
+    def _clear_caches(self):
+        """Clear all document's internal caches and update the declared path of every object contained by this document."""
+        #  Clean all internal caches and flags
+        self.internal_declarations = {}
+        self._internal_objects = []
+        self._imports_indexed = False
+        self._import_priorities = None
+
+        # Collects all the objects contained by this document and updates their DeclaredPath.
+        def callback(obj: 'CdmObject', obj_path: str) -> bool:
+            # Update the DeclaredPath property.
+            obj._declared_path = obj_path
+            self._internal_objects.append(obj)
+            return False
+        self.visit('', callback, None)
+
+    def _declare_object_definitions(self) -> None:
+        """Indexes all definitions contained by this document."""
+
+        skip_duplicate_types = {CdmObjectType.CONSTANT_ENTITY_DEF}
+        internal_declaration_types = {CdmObjectType.ENTITY_DEF, CdmObjectType.PARAMETER_DEF,
+                                      CdmObjectType.TRAIT_DEF, CdmObjectType.TRAIT_GROUP_DEF,
+                                      CdmObjectType.PURPOSE_DEF, CdmObjectType.DATA_TYPE_DEF,
+                                      CdmObjectType.TYPE_ATTRIBUTE_DEF, CdmObjectType.ENTITY_ATTRIBUTE_DEF,
+                                      CdmObjectType.ATTRIBUTE_GROUP_DEF, CdmObjectType.CONSTANT_ENTITY_DEF,
+                                      CdmObjectType.ATTRIBUTE_CONTEXT_DEF, CdmObjectType.LOCAL_ENTITY_DECLARATION_DEF,
+                                      CdmObjectType.REFERENCED_ENTITY_DECLARATION_DEF,
+                                      CdmObjectType.ATTRIBUTE_GROUP_DEF,
+                                      CdmObjectType.PROJECTION_DEF, CdmObjectType.OPERATION_ADD_COUNT_ATTRIBUTE_DEF,
+                                      CdmObjectType.OPERATION_ADD_SUPPORTING_ATTRIBUTE_DEF,
+                                      CdmObjectType.OPERATION_ADD_TYPE_ATTRIBUTE_DEF,
+                                      CdmObjectType.OPERATION_EXCLUDE_ATTRIBUTES_DEF,
+                                      CdmObjectType.OPERATION_ARRAY_EXPANSION_DEF,
+                                      CdmObjectType.OPERATION_COMBINE_ATTRIBUTES_DEF,
+                                      CdmObjectType.OPERATION_RENAME_ATTRIBUTES_DEF,
+                                      CdmObjectType.OPERATION_REPLACE_AS_FOREIGN_KEY_DEF,
+                                      CdmObjectType.OPERATION_INCLUDE_ATTRIBUTES_DEF,
+                                      CdmObjectType.OPERATION_ADD_ATTRIBUTE_GROUP_DEF,
+                                      CdmObjectType.OPERATION_ALTER_TRAITS_DEF,
+                                      CdmObjectType.OPERATION_ADD_ARTIFACT_ATTRIBUTE_DEF}
+
+        corpus_path_root = self._folder_path + self.name
+
+        for obj in self._internal_objects:
+            # I can't think of a better time than now to make sure any recently changed or added things have an in doc
+            obj.in_document = self
+
+            obj_path = obj._declared_path
+
+            if '(unspecified)' in obj_path:
+                continue
+
+            skip_duplicates = False
+            if obj.object_type in skip_duplicate_types:
+                # if there is a duplicate, don't complain, the path just finds the first one
+                skip_duplicates = True
+            if obj.object_type in internal_declaration_types:
+                corpus_path = '{}/{}'.format(corpus_path_root, obj_path)
+                if obj_path in self.internal_declarations and not skip_duplicates:
+                    logger.error(self.ctx, self._TAG, '_declare_object_definitions', corpus_path, CdmLogCode.ERR_PATH_IS_DUPLICATE,
+                                 corpus_path)
+                else:
+                    self.internal_declarations[obj_path] = obj
+                    self.ctx.corpus._register_symbol(obj_path, self)
+
+                    logger.debug(self.ctx, self._TAG, self._declare_object_definitions.__name__, corpus_path,
+                                'declared \'{}\''.format(obj_path))
+
+    def _finish_indexing(self, loaded_imports: bool) -> None:
+        """Marks that the document was indexed."""
+        logger.debug(self.ctx, self._TAG, self._finish_indexing.__name__, self.at_corpus_path,
+                         'index finish: {}'.format(self.at_corpus_path))
+
+        was_indexed_previously = self._declarations_indexed
+
+        self.ctx.corpus._document_library._mark_document_as_indexed(self)
+        self._imports_indexed = self._imports_indexed or loaded_imports
+        self._declarations_indexed = True
+        self._needs_indexing = not loaded_imports
+        self._internal_objects = None
+
+        # if the document declarations were indexed previously, do not log again.
+        if not was_indexed_previously and self._is_valid:
+            for definition in self.definitions:
+                if definition.object_type == CdmObjectType.ENTITY_DEF:
+                    logger.debug(self.ctx, self._TAG, self._finish_indexing.__name__, definition.at_corpus_path,
+                                 'indexed entity: {}'.format(definition.at_corpus_path))
+
+    def _resolve_object_definitions(self, res_opt: 'ResolveOptions') -> None:
+        ctx = self.ctx
+        res_opt._indexing_doc = self
+        reference_type_set = {CdmObjectType.ATTRIBUTE_REF, CdmObjectType.ATTRIBUTE_GROUP_REF,
+                              CdmObjectType.ATTRIBUTE_CONTEXT_REF, CdmObjectType.DATA_TYPE_REF,
+                              CdmObjectType.ENTITY_REF, CdmObjectType.PURPOSE_REF, CdmObjectType.TRAIT_REF}
+
+        for obj in self._internal_objects:
+            if obj.object_type in reference_type_set:
+                ctx._relative_path = obj._declared_path
+
+                if obj._offset_attribute_promise(obj.named_reference) < 0:
+                    res_new = obj.fetch_object_definition(res_opt)
+
+                    if not res_new:
+
+                        # it's okay if references can't be resolved when shallow validation is enabled.
+                        if res_opt.shallow_validation:
+                            logger.warning(self.ctx, self._TAG,
+                                           self._resolve_object_definitions.__name__, self.at_corpus_path,
+                                           CdmLogCode.WARN_RESOLVE_REFERENCE_FAILURE, obj.named_reference)
+                        else:
+                            logger.error(self.ctx, self._TAG, self._resolve_object_definitions.__name__, self.at_corpus_path,
+                                         CdmLogCode.ERR_RESOLVE_REFERENCE_FAILURE, obj.named_reference)
+                        # don't check in this file without both of these comments. handy for debug of failed lookups
+                        # res_test = obj.fetch_object_definition(res_opt)
+                    else:
+                        logger.debug(self.ctx, self._TAG, self._resolve_object_definitions.__name__,
+                                    self.at_corpus_path, 'resolved \'{}\''.format(obj.named_reference))
+                elif obj.object_type == CdmObjectType.PARAMETER_DEF:
+                    # when a parameter has a datatype that is a cdm object, validate that any default value is the
+                    # right kind object
+                    parameter = obj  # type: CdmParameterDefinition
+                    parameter._const_type_check(res_opt, self, None)
+
+        res_opt._indexing_doc = None
+
+    def _resolve_trait_arguments(self, res_opt: 'ResolveOptions') -> None:
+        ctx = self.ctx
+
+        for obj in self._internal_objects:
+            if obj.object_type == CdmObjectType.TRAIT_REF:
+                trait_ref = obj  # type: CdmTraitReference
+                trait_def = obj.fetch_object_definition(res_opt)
+
+                if not trait_def:
+                    continue
+
+                for argument_index, argument in enumerate(trait_ref.arguments):
+                    try:
+                        ctx._relative_path = argument._declared_path
+                        param_collection = trait_def._fetch_all_parameters(res_opt)
+                        param_found = param_collection.resolve_parameter(argument_index, argument.get_name())
+                        argument._resolved_parameter = param_found
+
+                        # if parameter type is entity, then the value should be an entity or ref to one
+                        # same is true of 'dataType' dataType
+                        argument_value = param_found._const_type_check(res_opt, self, argument.value)
+                        if argument_value:
+                            argument.value = argument_value
+                    except Exception as e:
+                        logger.error(self.ctx, self._TAG, '_resolve_trait_arguments', self.at_corpus_path, CdmLogCode.ERR_TRAIT_RESOLUTION_FAILURE,
+                            trait_def.get_name(), e)
+
+                trait_ref._resolved_arguments = True
+
     def _localize_corpus_paths(self, new_folder: 'CdmFolderDefinition') -> bool:
         all_went_well = True
-        was_blocking = self.ctx.corpus._block_declared_path_changes
-        self.ctx.corpus._block_declared_path_changes = True
 
-        logger.info(self._TAG, self.ctx, 'Localizing corpus paths in document \'{}\''.format(self.name), self._localize_corpus_paths.__name__)
+        logger.debug(self.ctx, self._TAG, self._localize_corpus_paths.__name__, new_folder.at_corpus_path,
+                    'Localizing corpus paths in document \'{}\''.format(self.name))
 
         def import_callback(obj: 'CdmObject', path: str) -> bool:
             nonlocal all_went_well
@@ -309,8 +495,6 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
         # find anything in the document that is a corpus path
         self.visit('', pre_callback, None)
 
-        self.ctx.corpus._block_declared_path_changes = was_blocking
-
         return all_went_well
 
     def _localize_corpus_path(self, path: str, new_folder: Optional['CdmFolderDefinition']) -> Tuple[str, bool]:
@@ -370,8 +554,8 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
             for imp in reversed_imports:
                 imp_doc = imp._document  # type: CdmDocumentDefinition
 
+                # moniker imports will be added to the end of the priority list later.
                 if imp_doc:
-                    # moniker imports will be added to the end of the priority list later.
                     if not imp.moniker and imp_doc not in priority_map:
                         # add doc
                         priority_map[imp_doc] = ImportInfo(sequence, False)
@@ -379,7 +563,8 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
                     else:
                         moniker_imports.append(imp_doc)
                 else:
-                    logger.warning(self._TAG, self.ctx, 'Import document {} not loaded. This might cause an unexpected output.'.format(imp.corpus_path))
+                    logger.warning(self.ctx, self._TAG, CdmDocumentDefinition._prioritize_imports.__name__, self.at_corpus_path,
+                                   CdmLogCode.WARN_DOC_IMPORT_NOT_LOADED ,imp.corpus_path)
 
             # now add the imports of the imports.
             for imp in reversed_imports:
@@ -387,7 +572,8 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
                 is_moniker = bool(imp.moniker)
 
                 if not imp_doc:
-                    logger.warning(self._TAG, self.ctx, 'Import document {} not loaded. This might cause an unexpected output.'.format(imp.corpus_path))
+                    logger.warning(self.ctx, self._TAG, CdmDocumentDefinition._prioritize_imports.__name__, self.at_corpus_path,
+                                   CdmLogCode.WARN_DOC_IMPORT_NOT_LOADED ,imp.corpus_path)
 
                 # if the document has circular imports its order on the impDoc.ImportPriorities list is not correct
                 # since the document itself will always be the first one on the list.
@@ -435,14 +621,12 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
         res_opt = res_opt if res_opt is not None else ResolveOptions(wrt_doc=self, directives=self.ctx.corpus.default_resolution_directives)
 
         self._declarations_indexed = False
-        self._imports_indexed = False
-        self._import_priorities = None
         self._needs_indexing = True
         self._is_valid = True
         return await self._index_if_needed(res_opt, True)
 
     async def _reload_async(self) -> None:
-        await self.ctx.corpus.fetch_object_async(self.corpus_path, force_reload=True)
+        await self.ctx.corpus.fetch_object_async(self.at_corpus_path, force_reload=True)
 
     async def save_as_async(self, new_name: str, save_referenced: bool = False, options: Optional['CopyOptions'] = None) -> bool:
         """saves the document back through the adapter in the requested format
@@ -450,40 +634,103 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
         'model.json' for back compat model, '*.manifest.json' for manifest, '*.json' for cdm defs
         save_referenced (default False) when true will also save any schema defintion documents that are
         linked from the source doc and that have been modified. existing document names are used for those."""
-        options = options if options is not None else CopyOptions()
+        with logger._enter_scope(self._TAG, self.ctx, self.save_as_async.__name__):
+            options = options if options is not None else CopyOptions()
 
-        index_if_needed = await self._index_if_needed(ResolveOptions(wrt_doc=self, directives=self.ctx.corpus.default_resolution_directives))
-        if not index_if_needed:
-            logger.error(self._TAG, self.ctx, 'Failed to index document prior to save {}.'.format(self.name), self.save_as_async.__name__)
-            return False
+            index_if_needed = await self._index_if_needed(ResolveOptions(wrt_doc=self, directives=self.ctx.corpus.default_resolution_directives))
+            if not index_if_needed:
+                logger.error(self.ctx, self._TAG, self.save_as_async.__name__, self.at_corpus_path, CdmLogCode.ERR_INDEX_FAILED, self.name)
+                return False
 
-        if new_name == self.name:
-            self._is_dirty = False
+            if new_name == self.name:
+                self._is_dirty = False
 
-        return await self.ctx.corpus.persistence._save_document_as_async(self, options, new_name, save_referenced)
+            # Import here to avoid circular import
+            from .cdm_entity_def import CdmEntityDefinition
+            from .cdm_manifest_def import CdmManifestDefinition
+
+            if not await self.ctx.corpus.persistence._save_document_as_async(self, options, new_name,
+                                                                         save_referenced):
+                return False
+            # Log the telemetry if the document is a manifest
+            if isinstance(self, CdmManifestDefinition):
+                for entity in self.entities:
+                    if isinstance(entity, CdmLocalEntityDeclarationDefinition):
+                        entity.reset_last_file_modified_old_time()
+                for relationship in self.relationships:
+                    relationship.reset_last_file_modified_old_time()
+                logger._ingest_manifest_telemetry(self, self.ctx, CdmDocumentDefinition.__name__,
+                                                  self.save_as_async.__name__, self.at_corpus_path)
+
+            # Log the telemetry of all entities contained in the document
+            else:
+                for obj in self.definitions:
+                    if isinstance(obj, CdmEntityDefinition):
+                        logger._ingest_entity_telemetry(obj, self.ctx, CdmDocumentDefinition.__name__,
+                                                        self.save_as_async.__name__, obj.at_corpus_path)
+
+            return True
 
     async def _save_linked_documents_async(self, options: 'CopyOptions') -> bool:
+        docs = []
+        if not options:
+            options = CopyOptions()
+
         # the only linked documents would be the imports
         if self.imports:
             for imp in self.imports:
                 # get the document object from the import
-                doc_imp = await self.ctx.corpus.fetch_object_async(imp.corpus_path, self)
-                if doc_imp and doc_imp._is_dirty:
-                    # save it with the same name
-                    if not await doc_imp.save_as_async(doc_imp.name, True, options):
-                        logger.error(self._TAG, self.ctx, 'Failed to save import {}'.format(doc_imp.name), self._save_linked_documents_async.__name__)
+                doc_path = self.ctx.corpus.storage.create_absolute_corpus_path(imp.corpus_path, self)
+                if not doc_path:
+                    logger.error(self.ctx, self._TAG, self._save_linked_documents_async.__name__, self.at_corpus_path,
+                                 CdmLogCode.ERR_VALDN_INVALID_CORPUS_PATH, imp.corpus_path)
+                    return False
+                try:
+                    obj_at = await self.ctx.corpus.fetch_object_async(doc_path)
+                    if not isinstance(obj_at, CdmDocumentDefinition):
+                        logger.error(self.ctx, self._TAG, self._save_linked_documents_async.__name__, self.at_corpus_path,
+                                     CdmLogCode.ERR_INVALID_CAST, doc_path, 'CdmDocumentDefinition')
                         return False
+                    elif not obj_at:
+                        logger.error(self.ctx, self._TAG, self._save_linked_documents_async.__name__, self.at_corpus_path,
+                                     CdmLogCode.ERR_PERSIST_OBJECT_NOT_FOUND, imp.corpus_path)
+                        return False
+                    doc_imp = obj_at.in_document
+                    if doc_imp is not None and doc_imp._is_dirty:
+                        docs.append(doc_imp)
+                except Exception as e:
+                    logger.error(self.ctx, self._TAG, self._save_linked_documents_async.__name__, self.at_corpus_path,
+                                 CdmLogCode.ERR_PERSIST_OBJECT_NOT_FOUND, imp.corpus_path + ' ' + str(e))
+                    return False
+
+            for doc_imp in docs:
+                # save it with the same name
+                if not await doc_imp.save_as_async(doc_imp.name, True, options):
+                    logger.error(self.ctx, self._TAG, self._save_linked_documents_async.__name__, self.at_corpus_path, CdmLogCode.ERR_DOC_IMPORT_SAVING_FAILURE, doc_imp.name)
+                    return False
         return True
+
+    def fetch_object_definition(self, res_opt: Optional['ResolveOptions'] = None) -> Optional['CdmObjectDefinition']:
+        if res_opt is None:
+            res_opt = ResolveOptions(self, self.ctx.corpus.default_resolution_directives)
+        return self
+
+    def fetch_object_definition_name(self) -> Optional[str]:
+        return self.name
 
     def validate(self) -> bool:
         if not bool(self.name):
-            logger.error(self._TAG, self.ctx, Errors.validate_error_string(self.at_corpus_path, ['name']))
+            missing_fields = ['name']
+            logger.error(self.ctx, self._TAG, 'validate', self.at_corpus_path, CdmLogCode.ERR_VALDN_INTEGRITY_CHECK_FAILURE, self.at_corpus_path, ', '.join(map(lambda s: '\'' + s + '\'', missing_fields)))
             return False
         return True
 
     def visit(self, path_from: str, pre_children: 'VisitCallback', post_children: 'VisitCallback') -> bool:
         if pre_children and pre_children(self, path_from):
             return False
+
+        if self.imports and self.imports._visit_array(path_from, pre_children, post_children):
+            return True
 
         if self.definitions and self.definitions._visit_array(path_from, pre_children, post_children):
             return True
@@ -493,11 +740,42 @@ class CdmDocumentDefinition(CdmObjectSimple, CdmContainerDefinition):
 
         return False
 
-    def _clear_caches(self):
-        self.internal_declarations = {}
+    def _import_path_to_doc(self, doc_dest: 'CdmDocumentDefinition') -> str:
+        avoid_loop = set()
 
-        def post_visit(obj: 'CdmObject', path: str) -> bool:
-            obj.declared_path = None
-            return False
+        def _internal_import_path_to_doc(doc_check: 'CdmDocumentDefinition', path: str) -> str:
+            if doc_check == doc_dest:
+                return ''
+            if doc_check in avoid_loop:
+                return None
+            avoid_loop.add(doc_check)
+            # if the docDest is one of the monikered imports of docCheck, then add the moniker and we are cool
+            if doc_check._import_priorities and doc_check._import_priorities.moniker_priority_map:
+                for key, value in doc_check._import_priorities.moniker_priority_map.items():
+                    if value == doc_dest:
+                        return '{}{}/'.format(path, key)
+            # ok, what if the document can be reached directly from the imports here
+            imp_info =  doc_check._import_priorities.import_priority[doc_check] \
+                if doc_check._import_priorities and doc_check._import_priorities.import_priority else None
+            if imp_info and imp_info.is_moniker is False:
+                # good enough
+                return path
 
-        self.visit('', None, post_visit)
+            # still nothing, now we need to check those docs deeper
+            if doc_check._import_priorities and doc_check._import_priorities.moniker_priority_map:
+                for key, value in doc_check._import_priorities.moniker_priority_map:
+                    path_found = _internal_import_path_to_doc(value, '{}{}/'.format(path, key))
+                    if path_found:
+                        return path_found
+
+            if doc_check._import_priorities and doc_check._import_priorities.import_priority:
+                for key, value in doc_check._import_priorities.import_priority:
+                    if not value.is_moniker:
+                        path_found = _internal_import_path_to_doc(key, path)
+                        if path_found:
+                            return path_found
+
+            return None
+
+        return _internal_import_path_to_doc(self, '')
+

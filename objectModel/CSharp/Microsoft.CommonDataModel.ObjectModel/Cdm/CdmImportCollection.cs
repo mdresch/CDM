@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Cdm
@@ -56,6 +56,20 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             return import;
         }
 
+        /// <inheritdocs/>
+        public new CdmImport Add(CdmImport currObject)
+        {
+            if (currObject.PreviousOwner != null)
+            {
+                var absolutePath = this.Ctx.Corpus.Storage.CreateAbsoluteCorpusPath(currObject.CorpusPath, currObject.PreviousOwner);
+
+                // Need to make the import path relative to the resolved manifest instead of the original manifest.
+                currObject.CorpusPath = this.Ctx.Corpus.Storage.CreateRelativeCorpusPath(absolutePath, this.Owner);
+            }
+
+            return base.Add(currObject);
+        }
+
         /// <inheritdoc />
         public new void AddRange(IEnumerable<CdmImport> importList)
         {
@@ -63,6 +77,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             {
                 this.Add(import);
             }
+        }
+
+        public CdmImport Item(string corpusPath, string moniker = null, bool checkMoniker = true)
+        {
+            return this.AllItems.Find(x => checkMoniker ?
+                                            x.CorpusPath == corpusPath && x.Moniker == moniker :
+                                            x.CorpusPath == corpusPath);
         }
     }
 }

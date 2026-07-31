@@ -4,11 +4,13 @@
 import os
 import unittest
 
-from cdm.enums import CdmStatusLevel, ImportsLoadStrategy
+from cdm.enums import CdmLogCode, CdmStatusLevel, ImportsLoadStrategy
 from cdm.utilities import AttributeResolutionDirectiveSet, ResolveOptions
+from cdm.objectmodel import CdmEntityDefinition, CdmCorpusDefinition, CdmDocumentDefinition
 
 from tests.common import async_test, TestHelper
-   
+
+
 class CorpusTests(unittest.TestCase):
     tests_subpath = os.path.join('Cdm', 'Corpus')
 
@@ -22,19 +24,34 @@ class CorpusTests(unittest.TestCase):
             self.fail(message)
         corpus.set_event_callback(callback, CdmStatusLevel.WARNING)
 
-        wrt_entity = await corpus.fetch_object_async('local:/wrtEntity.cdm.json/wrtEntity') # type: CdmEntityDefinition
+        wrt_entity = await corpus.fetch_object_async('local:/wrtEntity.cdm.json/wrtEntity')  # type: CdmEntityDefinition
         res_opt = ResolveOptions(wrt_entity, AttributeResolutionDirectiveSet())
         await wrt_entity.create_resolved_entity_async('NewEntity', res_opt)
 
     @async_test
     async def test_compute_last_modified_time_async(self):
         """Tests if ComputeLastModifiedTimeAsync doesn't log errors related to reference validation."""
-        corpus = TestHelper.get_local_corpus(self.tests_subpath, 'test_compute_last_modified_time_async') # type: CdmCorpusDefinition
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, 'test_compute_last_modified_time_async')  # type: CdmCorpusDefinition
 
         def callback(status_level: CdmStatusLevel, message: str):
             self.fail(message)
         corpus.set_event_callback(callback, CdmStatusLevel.ERROR)
         await corpus._compute_last_modified_time_async('local:/default.manifest.cdm.json')
+
+    @async_test
+    async def test_cycle_in_data_type(self):
+        """Tests if the OM is able to load a data type with a cycle and log an error when that occurs."""
+
+        expectedLogCodes = { CdmLogCode.ERR_CYCLE_IN_OBJECT_DEFINITION, CdmLogCode.ERR_TRAIT_RESOLUTION_FAILURE }
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, 'test_cycle_in_data_type', expected_codes=expectedLogCodes)
+
+        # Force the symbols to be resolved.
+        res_opt = ResolveOptions()
+        res_opt.imports_load_strategy = ImportsLoadStrategy.LOAD
+
+        await corpus.fetch_object_async('local:/doc.cdm.json', res_opt=res_opt)
+
+        TestHelper.assert_cdm_log_code_equality(corpus, CdmLogCode.ERR_CYCLE_IN_OBJECT_DEFINITION, True, self)
 
     @async_test
     async def test_lazy_load_imports(self):
@@ -64,8 +81,8 @@ class CorpusTests(unittest.TestCase):
         res_opt.imports_load_strategy = ImportsLoadStrategy.LAZY_LOAD
 
         # load entB which is imported by entA document.
-        doc_b = await corpus.fetch_object_async('local:/entB.cdm.json', None, res_opt)  # type: CdmDocumentDefinition
-        ent_a = await corpus.fetch_object_async('local:/entA.cdm.json/entA', None, res_opt)  # type: CdmEntityDefinition
+        doc_b = await corpus.fetch_object_async('local:/entB.cdm.json', None, res_opt=res_opt)  # type: CdmDocumentDefinition
+        ent_a = await corpus.fetch_object_async('local:/entA.cdm.json/entA', None, res_opt=res_opt)  # type: CdmEntityDefinition
 
         self.assertIsNone(ent_a.in_document._import_priorities)
         self.assertIsNone(doc_b._import_priorities)
@@ -113,3 +130,46 @@ class CorpusTests(unittest.TestCase):
         res_opt.shallow_validation = True
         await corpus.fetch_object_async('local:/doc.cdm.json', res_opt=res_opt)
         self.assertEqual(1, error_count)
+
+    @async_test
+    async def test_resolve_const_symbol_reference(self):
+        """Tests if a symbol imported with a moniker can be found as the last resource.
+        When resolving entityReference from wrtConstEntity, constEntity should be found and resolved."""
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, 'test_resolve_const_symbol_reference')
+
+        def callback(status_level: CdmStatusLevel, message: str):
+            self.fail(message)
+        corpus.set_event_callback(callback, CdmStatusLevel.WARNING)
+
+        wrt_entity = await corpus.fetch_object_async('local:/wrtConstEntity.cdm.json/wrtConstEntity') # type: CdmEntityDefinition
+        res_opt = ResolveOptions(wrt_entity, AttributeResolutionDirectiveSet())
+        await wrt_entity.create_resolved_entity_async('NewEntity', res_opt)
+
+    @async_test
+    async def test_incorrect_cast_on_fetch(self):
+        """Tests that errors when trying to cast objects after fetching is handled correctly."""
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, 'test_incorrect_cast_on_fetch', expected_codes=[CdmLogCode.ERR_INVALID_CAST])
+
+        manifest = await corpus.fetch_object_async('local:/default.manifest.cdm.json')
+        # this function will fetch the entity inside it
+        await corpus.calculate_entity_graph_async(manifest)
+        TestHelper.assert_cdm_log_code_equality(corpus, CdmLogCode.ERR_INVALID_CAST, True, self)
+
+    @async_test
+    async def test_max_depth_exceeded_resolution_guidance(self):
+        """Test warning correctly logged when max depth is exceeded for Resolution Guidance"""
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, 'test_max_depth_exceeded_resolution_guidance', expected_codes=[CdmLogCode.WARN_MAX_DEPTH_EXCEEDED])
+
+        entity = await corpus.fetch_object_async('local:/firstEntity.cdm.json/firstEntity')
+        await entity.create_resolved_entity_async('resFirstEntity')
+        TestHelper.assert_cdm_log_code_equality(corpus, CdmLogCode.WARN_MAX_DEPTH_EXCEEDED, True, self)
+
+    
+    @async_test
+    async def test_max_depth_exceeded_projections(self):
+        """Test warning correctly logged when max depth is exceeded for Projections"""
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, 'test_max_depth_exceeded_projections', expected_codes=[CdmLogCode.WARN_MAX_DEPTH_EXCEEDED])
+
+        entity = await corpus.fetch_object_async('local:/A.cdm.json/A')
+        await entity.create_resolved_entity_async('resA')
+        TestHelper.assert_cdm_log_code_equality(corpus, CdmLogCode.WARN_MAX_DEPTH_EXCEEDED, True, self)

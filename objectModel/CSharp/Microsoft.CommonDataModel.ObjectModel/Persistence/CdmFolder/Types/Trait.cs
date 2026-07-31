@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder.Types
@@ -16,5 +16,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder.Types
         public bool? ModifiesAttributes { get; set; }
         public bool? Ugly { get; set; }
         public List<string> AssociatedProperties { get; set; }
+        public dynamic DefaultVerb { get; set; }
+        public List<JToken> ExhibitsTraits { get; set; }
     }
 }

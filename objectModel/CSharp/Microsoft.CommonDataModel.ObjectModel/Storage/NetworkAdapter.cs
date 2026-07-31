@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Storage
@@ -11,13 +11,14 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
     using System.Net.Http;
     using System.Threading.Tasks;
     using System.Linq;
+    using System.Net;
 
     /// <summary>
     /// Network adapter is an abstract class that contains logic for adapters dealing with data across network.
     /// </summary>
     public abstract class NetworkAdapter : StorageAdapterBase, IDisposable
     {
-        protected CdmHttpClient httpClient;
+        protected ICdmHttpClient httpClient;
 
         // Use some default values in milliseconds in the case a user doesn't set them up.
         protected const double DefaultTimeout = 2000;
@@ -75,9 +76,17 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
             }
         }
 
+        /// <summary>
+        /// A set of HttpStatusCodes that will stop the retry logic if the HTTP response has one of these types.
+        /// </summary>
+        public HashSet<HttpStatusCode> AvoidRetryCodes { get; set; } = new HashSet<HttpStatusCode>()
+        {
+            HttpStatusCode.NotFound
+        };
+
         public async Task<CdmHttpResponse> ExecuteRequest(CdmHttpRequest httpRequest)
         {
-            var response = await this.httpClient.SendAsync(httpRequest, this.WaitTimeCallback);
+            var response = await this.httpClient.SendAsync(httpRequest, this.WaitTimeCallback, this.Ctx);
 
             if (response == null)
             {
@@ -87,10 +96,21 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
             if (!response.IsSuccessful)
             {
                 throw new HttpRequestException(
-                    $"HTTP {response.StatusCode} - {response.Reason}. Response headers: {string.Join(", ", response.ResponseHeaders.Select(m => m.Key + ":" + m.Value).ToArray())}. URL: {httpRequest.RequestedUrl}");
+                    $"HTTP {response.StatusCode} - {response.Reason}. Response headers: {string.Join(", ", response.ResponseHeaders.Select(m => m.Key + ":" + m.Value).ToArray())}. URL: {httpRequest.StripSasSig()}");
             }
 
             return response;
+        }
+
+        /// <summary>
+        /// Sets up the CDM request that can be used by CDM Http Client.
+        /// </summary>
+        /// <param name="path">Partial or full path to a network location.</param>
+        /// <param name="method">The method.</param>
+        /// <returns>The <see cref="CdmHttpRequest"/>, representing CDM Http request.</returns>
+        protected CdmHttpRequest SetUpCdmRequest(string path, HttpMethod method)
+        {
+            return SetUpCdmRequest(path, null, method);
         }
 
         /// <summary>
@@ -121,7 +141,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
         /// <returns>The <see cref="TimeSpan"/>, specifying the waiting time, or null if no wait time is necessary.</returns>
         private TimeSpan? DefaultGetWaitTime(CdmHttpResponse response, bool hasFailed, int retryNumber)
         {
-            if (response != null && response.IsSuccessful && !hasFailed)
+            if (response != null && ((response.IsSuccessful && !hasFailed) || this.AvoidRetryCodes.Contains(response.StatusCode)))
             {
                 return null;
             }

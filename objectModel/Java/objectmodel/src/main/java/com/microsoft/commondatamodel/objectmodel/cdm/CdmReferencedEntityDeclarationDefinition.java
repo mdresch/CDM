@@ -3,11 +3,11 @@
 
 package com.microsoft.commondatamodel.objectmodel.cdm;
 
+import com.microsoft.commondatamodel.objectmodel.enums.CdmLogCode;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmObjectType;
 import com.microsoft.commondatamodel.objectmodel.resolvedmodel.ResolvedAttributeSetBuilder;
 import com.microsoft.commondatamodel.objectmodel.resolvedmodel.ResolvedTraitSetBuilder;
 import com.microsoft.commondatamodel.objectmodel.utilities.CopyOptions;
-import com.microsoft.commondatamodel.objectmodel.utilities.Errors;
 import com.microsoft.commondatamodel.objectmodel.utilities.ResolveOptions;
 import com.microsoft.commondatamodel.objectmodel.utilities.StringUtils;
 import com.microsoft.commondatamodel.objectmodel.utilities.TimeUtils;
@@ -17,16 +17,20 @@ import com.microsoft.commondatamodel.objectmodel.utilities.logger.Logger;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 import java.util.ArrayList;
 
 public class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitionBase implements
     CdmEntityDeclarationDefinition {
+
+  private static final String TAG = CdmReferencedEntityDeclarationDefinition.class.getSimpleName();
 
   private String entityName;
   private String entitySchema;
   private OffsetDateTime lastFileStatusCheckTime;
   private OffsetDateTime lastFileModifiedTime;
   private OffsetDateTime lastChildFileModifiedTime;
+  private String virtualLocation;
 
   public CdmReferencedEntityDeclarationDefinition(final CdmCorpusContext ctx, final String entityName) {
     super(ctx);
@@ -84,6 +88,38 @@ public class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
     this.lastChildFileModifiedTime = lastChildFileModifiedTime;
   }
 
+  /**
+   * Gets this entity's virtual location, it's model.json file's location if entity is from a model.json file
+   *
+   * @deprecated This function is extremely likely to be removed in the public interface, and not
+   * meant to be called externally at all. Please refrain from using it.
+   * @return String
+   */
+  @Deprecated
+  public String getVirtualLocation() { return this.virtualLocation; }
+
+  /**
+   * Sets this entity's virtual location, it's model.json file's location if entity is from a model.json file
+   *
+   * @deprecated This function is extremely likely to be removed in the public interface, and not
+   * meant to be called externally at all. Please refrain from using it.
+   */
+  @Deprecated
+  public void setVirtualLocation(final String virtualLocation) {
+    this.virtualLocation = virtualLocation;
+  }
+
+  /**
+   * Gets whether this entity is virtual, which means it's coming from model.json file.
+   *
+   * @deprecated This function is extremely likely to be removed in the public interface, and not
+   * meant to be called externally at all. Please refrain from using it.
+   * @return boolean
+   */
+  public boolean isVirtual() {
+    return !StringUtils.isNullOrTrimEmpty(this.virtualLocation);
+  }
+
   @Override
   public String getName() {
     return this.getEntityName();
@@ -96,6 +132,15 @@ public class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
 
   @Override
   public boolean visit(final String pathRoot, final VisitCallback preChildren, final VisitCallback postChildren) {
+    String path = "";
+
+    if (preChildren != null && preChildren.invoke(this, path)) {
+      return false;
+    }
+
+    if (postChildren!= null && postChildren.invoke(this, path)) {
+      return true;
+    }
     return false;
   }
 
@@ -108,8 +153,9 @@ public class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
               .getStorage()
               .createAbsoluteCorpusPath(this.getEntityPath(), this.getInDocument());
 
-      final OffsetDateTime modifiedTime =
-          this.getCtx().getCorpus().computeLastModifiedTimeAsync(fullPath, this).join();
+      final OffsetDateTime modifiedTime = this.isVirtual()
+              ? this.getCtx().getCorpus().getLastModifiedTimeFromObjectAsync(this).join()
+              : this.getCtx().getCorpus().computeLastModifiedTimeAsync(fullPath, this).join();
 
       // update modified times
       setLastFileStatusCheckTime(OffsetDateTime.now(ZoneOffset.UTC));
@@ -139,7 +185,7 @@ public class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
     }
 
     if (missingFields.size() > 0) {
-      Logger.error(CdmReferencedEntityDeclarationDefinition.class.getSimpleName(), this.getCtx(), Errors.validateErrorString(this.getAtCorpusPath(), missingFields));
+      Logger.error(this.getCtx(), TAG, "validate", this.getAtCorpusPath(), CdmLogCode.ErrValdnIntegrityCheckFailure, this.getAtCorpusPath(), String.join(", ", missingFields.parallelStream().map((s) -> { return String.format("'%s'", s);}).collect(Collectors.toList())));
       return false;
     }
     return true;
@@ -171,13 +217,13 @@ public class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
       copy = new CdmReferencedEntityDeclarationDefinition(this.getCtx(), this.getEntityName());
     } else {
       copy = (CdmReferencedEntityDeclarationDefinition) host;
-      copy.setCtx(this.getCtx());
       copy.setEntityName(this.getEntityName());
     }
 
     copy.setEntityPath(this.getEntityPath());
     copy.setLastFileStatusCheckTime(this.getLastFileStatusCheckTime());
     copy.setLastFileModifiedTime(this.getLastFileModifiedTime());
+    copy.setVirtualLocation(this.getVirtualLocation());
 
     return copy;
   }
@@ -222,6 +268,18 @@ public class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
 
   @Override
   public CdmCollection<CdmDataPartitionPatternDefinition> getDataPartitionPatterns() {
+    // Intended to return null.
+    return null;
+  }
+
+  @Override
+  public CdmCollection<CdmDataPartitionDefinition> getIncrementalPartitions() {
+    // Intended to return null.
+    return null;
+  }
+
+  @Override
+  public CdmCollection<CdmDataPartitionPatternDefinition> getIncrementalPartitionPatterns () {
     // Intended to return null.
     return null;
   }

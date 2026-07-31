@@ -27,7 +27,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     /**
      * The path between TestDataPath and TestName.
      */
-    const testsSubpath: string = 'Cdm/Projection/TestProjectionRename';
+    const testsSubpath: string = 'Cdm/Projection/ProjectionRenameTest';
 
     /**
      * All possible combinations of the different resolution directives
@@ -63,7 +63,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         projection.operations.push(renameAttrsOp);
 
         // Create an entity reference to hold this projection
-        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, null);
+        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, undefined);
         projectionEntityRef.explicitReference = projection;
 
         // Create an entity attribute that contains this projection and add this to the entity
@@ -72,7 +72,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         entity.attributes.push(entityAttribute);
 
         // Resolve the entity.
-        const resolvedEntity: CdmEntityDefinition = await entity.createResolvedEntityAsync(`Resolved_${entity.entityName}.cdm.json`, null, localRoot);
+        const resolvedEntity: CdmEntityDefinition = await entity.createResolvedEntityAsync(`Resolved_${entity.entityName}.cdm.json`, undefined, localRoot);
 
         // Verify correctness of the resolved attributes after running the RenameAttributes operation
         // Original set of attributes: ['id', 'name', 'value', 'date']
@@ -109,14 +109,14 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         projection.operations.push(renameAttrsOp);
 
         // Create an entity reference to hold this projection
-        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, null);
+        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, undefined);
         projectionEntityRef.explicitReference = projection;
 
         // Set the entity's ExtendEntity to be the projection
         entity.extendsEntity = projectionEntityRef;
 
         // Resolve the entity
-        const resolvedEntity: CdmEntityDefinition = await entity.createResolvedEntityAsync(`Resolved_${entity.entityName}.cdm.json`, null, localRoot);
+        const resolvedEntity: CdmEntityDefinition = await entity.createResolvedEntityAsync(`Resolved_${entity.entityName}.cdm.json`, undefined, localRoot);
 
         // Verify correctness of the resolved attributes after running the RenameAttributes operation
         // Original set of attributes: ['id', 'name', 'value', 'date']
@@ -153,7 +153,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         projection.operations.push(renameAttrsOp);
 
         // Create an entity reference to hold this projection
-        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, null);
+        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, undefined);
         projectionEntityRef.explicitReference = projection;
 
         // Create another projection that uses the previous projection as its source
@@ -167,7 +167,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         projection2.operations.push(renameAttrsOp2);
 
         // Create an entity reference to hold this projection
-        const projectionEntityRef2: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, null);
+        const projectionEntityRef2: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, undefined);
         projectionEntityRef2.explicitReference = projection2;
 
         // Create an entity attribute that contains this projection and add this to the entity
@@ -176,7 +176,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         entity.attributes.push(entityAttribute);
 
         // Resolve the entity
-        const resolvedEntity: CdmEntityDefinition = await entity.createResolvedEntityAsync(`Resolved_${entity.entityName}.cdm.json`, null, localRoot);
+        const resolvedEntity: CdmEntityDefinition = await entity.createResolvedEntityAsync(`Resolved_${entity.entityName}.cdm.json`, undefined, localRoot);
 
         // Verify correctness of the resolved attributes after running the RenameAttributes operations
         // Original set of attributes: ['id', 'name', 'value', 'date']
@@ -213,7 +213,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         projection.operations.push(renameAttrsOp);
 
         // Create an entity reference to hold this projection
-        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, null);
+        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, undefined);
         projectionEntityRef.explicitReference = projection;
 
         // Create an entity attribute that contains this projection and add this to the entity
@@ -222,7 +222,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         entity.attributes.push(entityAttribute);
 
         // Resolve the entity.
-        const resolvedEntity: CdmEntityDefinition = await entity.createResolvedEntityAsync(`Resolved_${entity.entityName}.cdm.json`, null, localRoot);
+        const resolvedEntity: CdmEntityDefinition = await entity.createResolvedEntityAsync(`Resolved_${entity.entityName}.cdm.json`, undefined, localRoot);
 
         // Verify correctness of the resolved attributes after running the RenameAttributes operation
         // Original set of attributes: ['id', 'name', 'value', 'date']
@@ -260,7 +260,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         projection.operations.push(renameAttrsOp);
 
         // Create an entity reference to hold this projection.
-        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, null);
+        const projectionEntityRef: CdmEntityReference = corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, undefined);
         projectionEntityRef.explicitReference = projection;
 
         // Create an entity attribute that contains this projection and add this to the entity.
@@ -314,7 +314,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestRenameFormatAsStringProj', async () => {
         const testName: string = 'TestRenameFormatAsStringProj';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -345,7 +345,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestRenameFormat', async () => {
         const testName: string = 'TestRenameFormat';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -376,7 +376,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestRenameFormatProj', async () => {
         const testName: string = 'TestRenameFormatProj';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -407,7 +407,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestSingleNestedProj', async () => {
         const testName: string = 'TestSingleNestedProj';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -438,7 +438,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestNestedProj', async () => {
         const testName: string = 'TestNestedProj';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -448,7 +448,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         const resolvedEntity: CdmEntityDefinition = await projectionTestUtils.getResolvedEntity(corpus, entity, []);
 
         // Original set of attributes: ['name', 'age', 'address', 'phoneNumber', 'email']
-        // Rename all attributes attributes with format {A}.{o}.{M}, then rename 'age' with format '{a}-{o}-{m}'
+        // Rename all attributes attributes with format {A}.{o}.{M}, then rename 'age' with format '{a}-{o}-{m}', finally rename "email" with format '{a}-{o}-{mo}'
         expect(resolvedEntity.attributes.length)
             .toEqual(5);
         expect((resolvedEntity.attributes.allItems[0] as CdmTypeAttributeDefinition).name)
@@ -460,7 +460,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
         expect((resolvedEntity.attributes.allItems[3] as CdmTypeAttributeDefinition).name)
             .toEqual('PersonInfo..PhoneNumber');
         expect((resolvedEntity.attributes.allItems[4] as CdmTypeAttributeDefinition).name)
-            .toEqual('PersonInfo..Email');
+            .toEqual('PersonInfo--email');
     });
 
     /**
@@ -469,7 +469,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestMultipleRename', async () => {
         const testName: string = 'TestMultipleRename';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -504,7 +504,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestExtendsEntityProj', async () => {
         const testName: string = 'TestExtendsEntityProj';
         const entityName: string = 'Child';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -536,7 +536,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestExtendsEntity', async () => {
         const testName: string = 'TestExtendsEntity';
         const entityName: string = 'Child';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -567,9 +567,13 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestPolymorphicProj', async () => {
         const testName: string = 'TestPolymorphicProj';
         const entityName: string = 'BusinessPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
+            if (resOpt.includes('structured')) {
+                // Rename attributes is not supported on an attribute group yet.
+                continue;
+            }
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
         }
 
@@ -602,7 +606,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestPolymorphicApplyToProj', async () => {
         const testName: string = 'TestPolymorphicApplyToProj';
         const entityName: string = 'BusinessPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -637,7 +641,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestPolymorphic', async () => {
         const testName: string = 'TestPolymorphic';
         const entityName: string = 'BusinessPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -672,7 +676,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestArraySourceProj', async () => {
         const testName: string = 'TestArraySourceProj';
         const entityName: string = 'FriendGroup';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -726,7 +730,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestArraySource', async () => {
         const testName: string = 'TestArraySource';
         const entityName: string = 'FriendGroup';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -781,7 +785,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestArraySourceRenameApplyToProj', async () => {
         const testName: string = 'TestArraySourceRenameApplyToProj';
         const entityName: string = 'FriendGroup';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -834,7 +838,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestConditionalProj', async () => {
         const testName: string = 'TestConditionalProj';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -882,7 +886,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestEmptyApplyTo', async () => {
         const testName: string = 'TestEmptyApplyTo';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -913,7 +917,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestGroupProj', async () => {
         const testName: string = 'TestGroupProj';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -944,7 +948,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('TestGroupRename', async () => {
         const testName: string = 'TestGroupRename';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -975,7 +979,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     it('testRenameAndExcludeProj', async () => {
         const testName: string = "TestRenameAndExcludeProj";
         const entityName: string = "NewPerson";
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -1004,7 +1008,7 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
     test.skip('TestEANameProj', async () => {
         const testName: string = 'TestEANameProj';
         const entityName: string = 'NewPerson';
-        const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
         for (const resOpt of resOptsCombinations) {
             await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -1045,5 +1049,39 @@ describe('Cdm/Projection/ProjectionRenameAttributesTest', () => {
             .toEqual('company');
         expect((attGroup2.members[2] as CdmTypeAttributeDefinition).name)
             .toEqual('tenure');
+    });
+
+    /**
+     * Test resolving a type attribute with a rename attributes operation
+     */
+    it('TestTypeAttributeProj', async () => {
+        const testName: string = 'TestTypeAttributeProj';
+        const entityName: string = 'Person';
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
+
+        for (const resOpt of resOptsCombinations) {
+            await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
+        }
+
+        const entity: CdmEntityDefinition = await corpus.fetchObjectAsync<CdmEntityDefinition>(`local:/${entityName}.cdm.json/${entityName}`);
+        const resolvedEntity: CdmEntityDefinition = await projectionTestUtils.getResolvedEntity(corpus, entity, ['referenceOnly']);
+
+        // Original set of attributes: ["name", "age", "address", "phoneNumber", "email"]
+        // Rename with format "n{a}e{o}w{M}" attributes ["address"]
+        // Add new attribute realNewAddress with rename format "n{a}e{o}w{M}"
+        expect(resolvedEntity.attributes.length)
+            .toEqual(6);
+        expect((resolvedEntity.attributes.allItems[0] as CdmTypeAttributeDefinition).name)
+            .toEqual('name');
+        expect((resolvedEntity.attributes.allItems[1] as CdmTypeAttributeDefinition).name)
+            .toEqual('age');
+        expect((resolvedEntity.attributes.allItems[2] as CdmTypeAttributeDefinition).name)
+            .toEqual('naddressewAddress');
+        expect((resolvedEntity.attributes.allItems[3] as CdmTypeAttributeDefinition).name)
+            .toEqual('naddressewRealNewAddress');
+        expect((resolvedEntity.attributes.allItems[4] as CdmTypeAttributeDefinition).name)
+            .toEqual('phoneNumber');
+        expect((resolvedEntity.attributes.allItems[5] as CdmTypeAttributeDefinition).name)
+            .toEqual('email');
     });
 });

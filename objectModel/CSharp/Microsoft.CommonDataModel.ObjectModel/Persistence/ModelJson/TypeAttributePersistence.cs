@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
@@ -47,7 +47,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
                 Description = instance.GetProperty("description")
             };
 
-            Utils.ProcessTraitsAndAnnotationsToData(instance.Ctx, attribute, instance.AppliedTraits);
+            await Utils.ProcessTraitsAndAnnotationsToData(instance.Ctx, attribute, instance.AppliedTraits);
 
             var t2pm = new TraitToPropertyMap(instance);
 

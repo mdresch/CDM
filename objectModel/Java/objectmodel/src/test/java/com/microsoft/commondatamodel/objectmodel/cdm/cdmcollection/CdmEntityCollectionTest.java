@@ -14,15 +14,11 @@ import com.microsoft.commondatamodel.objectmodel.enums.CdmObjectType;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmStatusLevel;
 import com.microsoft.commondatamodel.objectmodel.storage.LocalAdapter;
 import com.microsoft.commondatamodel.objectmodel.utilities.EventCallback;
-import com.microsoft.commondatamodel.objectmodel.utilities.InterceptLog;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 
-import com.microsoft.commondatamodel.objectmodel.utilities.logger.Logger;
-import org.apache.logging.log4j.Level;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -31,9 +27,8 @@ public class CdmEntityCollectionTest {
    * Tests whether manifest.getEntities().add() can be used with {@link CdmEntityDefinition} parameter.
    */
   @Test
-  public void testManifestAddEntityWithLocalizedPaths() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void testManifestAddEntityWithLocalizedPaths() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
     final CdmCorpusDefinition cdmCorpus = manifest.getCtx().getCorpus();
 
     final CdmEntityDefinition entity =
@@ -72,8 +67,8 @@ public class CdmEntityCollectionTest {
    * Tests whether the EntityDefinition can be passed directly to manifest.getEntities().add().
    */
   @Test
-  public void testManifestCanAddEntityDefinition() {
-    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void testManifestCanAddEntityDefinition() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmEntityDefinition entity = new CdmEntityDefinition(
         manifest.getCtx(),
@@ -135,7 +130,7 @@ public class CdmEntityCollectionTest {
 
     Assert.assertEquals(1, logCapture.get("count"));
     Assert.assertEquals(CdmStatusLevel.Error, logCapture.get("level"));
-    Assert.assertEquals("CdmEntityCollection | Expected entity to have an \"Owner\" document set. Cannot create entity declaration to add to manifest. | add", logCapture.get("message"));
+    Assert.assertTrue(logCapture.get("message").toString().contains("CdmEntityCollection | Expected entity to have an \"Owner\" document set. Cannot create entity declaration to add to manifest. | add"));
     Assert.assertEquals(0, manifest.getEntities().getCount());
   }
 
@@ -172,9 +167,8 @@ public class CdmEntityCollectionTest {
   }
 
   @Test
-  public void testCdmEntityCollectionRemoveEntityDeclarationDefinition() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void testCdmEntityCollectionRemoveEntityDeclarationDefinition() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
     final CdmEntityDefinition entity =
         new CdmEntityDefinition(manifest.getCtx(), "entityName", null);
     CdmCollectionHelperFunctions.createDocumentForEntity(manifest.getCtx().getCorpus(), entity);

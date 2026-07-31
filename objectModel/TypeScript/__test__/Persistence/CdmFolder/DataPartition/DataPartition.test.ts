@@ -1,23 +1,27 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-import * as fs from 'fs';
 import {
     CdmCorpusDefinition,
     CdmDataPartitionDefinition,
     CdmEntityDeclarationDefinition,
-    CdmFolderDefinition,
+    CdmEntityDefinition,
+    cdmIncrementalPartitionType,
     CdmLocalEntityDeclarationDefinition,
     CdmManifestDefinition,
     cdmObjectType,
+    cdmStatusLevel,
+    constants,
     copyOptions,
+    enterScope,
     resolveContext,
-    resolveOptions
+    resolveOptions,
 } from '../../../../internal';
 import { CdmFolder } from '../../../../Persistence';
-import { DataPartition, EntityDeclarationDefinition, ManifestContent, KeyValPair } from '../../../../Persistence/CdmFolder/types';
-import { LocalAdapter } from '../../../../Storage';
+import { DataPartition, EntityDeclarationDefinition, ManifestContent, KeyValPair, TraitReference } from '../../../../Persistence/CdmFolder/types';
 import { testHelper } from '../../../testHelper';
+import { createDocumentForEntity } from '../../../Cdm/CdmCollection/CdmCollectionHelperFunctions';
+import { using } from 'using-statement';
 
 describe('Persistence.CdmFolder.DataPartition', () => {
     /// <summary>
@@ -115,18 +119,18 @@ describe('Persistence.CdmFolder.DataPartition', () => {
     });
 
     /**
-     * Testing programatically creating manifest with partitions and persisting
+     * Testing programmatically creating manifest with partitions and persisting
      */
     it('TestProgrammaticallyCreatePartitions', async () => {
-        const corpus: CdmCorpusDefinition = new CdmCorpusDefinition();
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestProgrammaticallyCreatePartitions', undefined, undefined, undefined, false);
         const manifest: CdmManifestDefinition = corpus.MakeObject<CdmManifestDefinition>(cdmObjectType.manifestDef, 'manifest');
         const entity: CdmEntityDeclarationDefinition = manifest.entities.push('entity');
 
         const relativePartition: CdmDataPartitionDefinition =
             corpus.MakeObject<CdmDataPartitionDefinition>(cdmObjectType.dataPartitionDef, 'relative partition');
         relativePartition.location = 'relative/path';
-        relativePartition.arguments.set('test1', [ 'argument1' ]);
-        relativePartition.arguments.set('test2', [ 'argument2', 'argument3' ]);
+        relativePartition.arguments.set('test1', ['argument1']);
+        relativePartition.arguments.set('test2', ['argument2', 'argument3']);
 
         const absolutePartition: CdmDataPartitionDefinition =
             corpus.MakeObject<CdmDataPartitionDefinition>(cdmObjectType.dataPartitionDef, 'absolute partition');
@@ -170,5 +174,166 @@ describe('Persistence.CdmFolder.DataPartition', () => {
         // test if empty argument list is set to null
         expect(absolutePartitionData.arguments)
             .toBeUndefined();
+    });
+
+    /**
+     * Testing loading manifest with local entity declaration having an incremental partition without incremental trait.
+     */
+    it('TestFromIncrementalPartitionWithoutTrait', async () => {
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestFromIncrementalPartitionWithoutTrait');
+        let errorMessageVerified: boolean = false
+        // not checking the CdmLogCode here as we want to check if this error message constructed correctly for the partition (it shares the same CdmLogCode with partition pattern)
+        corpus.setEventCallback((level, message) => {
+            if (message.indexOf('Failed to persist object \'DeletePartition\'. This object does not contain the trait \'is.partition.incremental\', so it should not be in the collection \'incrementalPartitions\'. | fromData') !== -1) {
+                errorMessageVerified = true;
+            } else {
+                throw new Error('Some unexpected failure - ' + message);
+            }
+        }, cdmStatusLevel.warning);
+
+        const manifest: CdmManifestDefinition = await corpus.fetchObjectAsync<CdmManifestDefinition>('local:/entities.manifest.cdm.json');
+        expect(manifest.entities.length)
+            .toBe(1);
+        expect(manifest.entities.allItems[0].objectType)
+            .toBe(cdmObjectType.localEntityDeclarationDef);
+        const entity: CdmLocalEntityDeclarationDefinition = manifest.entities.allItems[0] as CdmLocalEntityDeclarationDefinition;
+        expect(entity.incrementalPartitions.length)
+            .toBe(1);
+        const incrementalPartition = entity.incrementalPartitions.allItems[0]
+        expect(incrementalPartition.name)
+            .toBe('UpsertPartition');
+        expect(incrementalPartition.exhibitsTraits.length)
+            .toBe(1);
+        expect(incrementalPartition.exhibitsTraits.allItems[0].fetchObjectDefinitionName())
+            .toBe(constants.INCREMENTAL_TRAIT_NAME);
+        expect(errorMessageVerified)
+            .toBeTruthy();
+    });
+
+    /**
+     * Testing loading manifest with local entity declaration having a data partition with incremental trait.
+     */
+    it('TestFromDataPartitionWithIncrementalTrait', async () => {
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestFromDataPartitionWithIncrementalTrait');
+        let errorMessageVerified: boolean = false
+        // not checking the CdmLogCode here as we want to check if this error message constructed correctly for the partition (it shares the same CdmLogCode with partition pattern)
+        corpus.setEventCallback((level, message) => {
+            if (message.indexOf('Failed to persist object \'UpsertPartition\'. This object contains the trait \'is.partition.incremental\', so it should not be in the collection \'dataPartitions\'. | fromData') !== -1) {
+                errorMessageVerified = true;
+            } else {
+                throw new Error('Some unexpected failure - ' + message);
+            }
+        }, cdmStatusLevel.warning);
+
+        const manifest: CdmManifestDefinition = await corpus.fetchObjectAsync<CdmManifestDefinition>('local:/entities.manifest.cdm.json');
+        expect(manifest.entities.length)
+            .toBe(1);
+        expect(manifest.entities.allItems[0].objectType)
+            .toBe(cdmObjectType.localEntityDeclarationDef);
+        const entity: CdmLocalEntityDeclarationDefinition = manifest.entities.allItems[0] as CdmLocalEntityDeclarationDefinition;
+        expect(entity.dataPartitions.length)
+            .toBe(1);
+        expect(entity.dataPartitions.allItems[0].name)
+            .toBe('TestingPartition');
+        expect(errorMessageVerified)
+            .toBeTruthy();
+    });
+
+    /*
+    * Testing saving manifest with local entity declaration having an incremental partition without incremental trait.
+    */
+    it('TestToIncrementalPartitionWithoutTrait', async () => {
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestToIncrementalPartitionWithoutTrait');
+        let errorMessageVerified: boolean = false
+        // not checking the CdmLogCode here as we want to check if this error message constructed correctly for the partition (it shares the same CdmLogCode with partition pattern)
+        corpus.setEventCallback((level, message) => {
+            if (message.indexOf('Failed to persist object \'DeletePartition\'. This object does not contain the trait \'is.partition.incremental\', so it should not be in the collection \'incrementalPartitions\'. | toData') !== -1) {
+                errorMessageVerified = true;
+            } else {
+                throw new Error('Some unexpected failure - ' + message);
+            }
+        }, cdmStatusLevel.warning);
+
+        const manifest: CdmManifestDefinition = new CdmManifestDefinition(corpus.ctx, 'manifest');
+        corpus.storage.fetchRootFolder('local').documents.push(manifest);
+
+        const entity: CdmEntityDefinition = new CdmEntityDefinition(corpus.ctx, 'entityName', undefined);
+        createDocumentForEntity(corpus, entity);
+        const localizedEntityDeclaration = manifest.entities.push(entity);
+
+        const upsertIncrementalPartition = corpus.MakeObject<CdmDataPartitionDefinition>(cdmObjectType.dataPartitionDef, 'UpsertPartition', false);
+        upsertIncrementalPartition.location = '/IncrementalData';
+        upsertIncrementalPartition.exhibitsTraits.push(constants.INCREMENTAL_TRAIT_NAME, [['type', cdmIncrementalPartitionType[cdmIncrementalPartitionType.Upsert]]]);
+
+        const deletePartition = corpus.MakeObject<CdmDataPartitionDefinition>(cdmObjectType.dataPartitionDef, 'DeletePartition', false);
+        deletePartition.location = '/IncrementalData';
+        localizedEntityDeclaration.incrementalPartitions.push(upsertIncrementalPartition);
+        localizedEntityDeclaration.incrementalPartitions.push(deletePartition);
+
+        using(enterScope('DataPartitionTest', corpus.ctx, 'TestToIncrementalPartitionWithoutTrait'), _ => {
+            const manifestData = CdmFolder.ManifestPersistence.toData(manifest, undefined, undefined);
+            expect(manifestData.entities.length)
+                .toBe(1);
+            const entityData: EntityDeclarationDefinition = manifestData.entities[0];
+            expect(entityData.incrementalPartitions.length)
+                .toBe(1);
+            const partitionData: DataPartition = entityData.incrementalPartitions[0];
+            expect(partitionData.name)
+                .toBe('UpsertPartition');
+            expect(partitionData.exhibitsTraits.length)
+                .toBe(1);
+            expect((partitionData.exhibitsTraits[0] as TraitReference).traitReference)
+                .toBe(constants.INCREMENTAL_TRAIT_NAME);
+        });
+
+        expect(errorMessageVerified)
+            .toBeTruthy();
+    });
+
+    /*
+    * Testing saving manifest with local entity declaration having a data partition with incremental trait.
+    */
+    it('TestToDataPartitionWithIncrementalTrait', async () => {
+        const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestToDataPartitionWithIncrementalTrait');
+        let errorMessageVerified: boolean = false
+        // not checking the CdmLogCode here as we want to check if this error message constructed correctly for the partition (it shares the same CdmLogCode with partition pattern)
+        corpus.setEventCallback((level, message) => {
+            if (message.indexOf('Failed to persist object \'UpsertPartition\'. This object contains the trait \'is.partition.incremental\', so it should not be in the collection \'dataPartitions\'. | toData') !== -1) {
+                errorMessageVerified = true;
+            } else {
+                throw new Error('Some unexpected failure - ' + message);
+            }
+        }, cdmStatusLevel.warning);
+
+        const manifest: CdmManifestDefinition = new CdmManifestDefinition(corpus.ctx, 'manifest');
+        corpus.storage.fetchRootFolder('local').documents.push(manifest);
+
+        const entity: CdmEntityDefinition = new CdmEntityDefinition(corpus.ctx, 'entityName', undefined);
+        createDocumentForEntity(corpus, entity);
+        const localizedEntityDeclaration = manifest.entities.push(entity);
+
+        const upsertIncrementalPartition = corpus.MakeObject<CdmDataPartitionDefinition>(cdmObjectType.dataPartitionDef, 'UpsertPartition', false);
+        upsertIncrementalPartition.location = '/IncrementalData';
+        upsertIncrementalPartition.exhibitsTraits.push(constants.INCREMENTAL_TRAIT_NAME, [['type', cdmIncrementalPartitionType[cdmIncrementalPartitionType.Upsert]]]);
+
+        const deletePartition = corpus.MakeObject<CdmDataPartitionDefinition>(cdmObjectType.dataPartitionDef, 'TestingPartition', false);
+        deletePartition.location = '/testingData';
+        localizedEntityDeclaration.dataPartitions.push(upsertIncrementalPartition);
+        localizedEntityDeclaration.dataPartitions.push(deletePartition);
+
+        using(enterScope('DataPartitionTest', corpus.ctx, 'TestToDataPartitionWithIncrementalTrait'), _ => {
+            const manifestData = CdmFolder.ManifestPersistence.toData(manifest, undefined, undefined);
+            expect(manifestData.entities.length)
+                .toBe(1);
+            const entityData: EntityDeclarationDefinition = manifestData.entities[0];
+            expect(entityData.dataPartitions.length)
+                .toBe(1);
+            const partitionData: DataPartition = entityData.dataPartitions[0];
+            expect(partitionData.name)
+                .toBe('TestingPartition');
+        });
+
+        expect(errorMessageVerified)
+            .toBeTruthy();
     });
 });

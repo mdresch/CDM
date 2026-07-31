@@ -10,7 +10,7 @@ import com.microsoft.commondatamodel.objectmodel.resolvedmodel.ResolvedAttribute
 import com.microsoft.commondatamodel.objectmodel.resolvedmodel.ResolvedTrait;
 import com.microsoft.commondatamodel.objectmodel.resolvedmodel.ResolvedTraitSet;
 import com.microsoft.commondatamodel.objectmodel.resolvedmodel.ResolvedTraitSetBuilder;
-import com.microsoft.commondatamodel.objectmodel.utilities.CdmException;
+import com.microsoft.commondatamodel.objectmodel.utilities.exceptions.CdmException;
 import com.microsoft.commondatamodel.objectmodel.utilities.CopyOptions;
 import com.microsoft.commondatamodel.objectmodel.utilities.ResolveOptions;
 import com.microsoft.commondatamodel.objectmodel.utilities.StringUtils;
@@ -20,11 +20,12 @@ import com.microsoft.commondatamodel.objectmodel.utilities.VisitCallback;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public class CdmTraitReference extends CdmObjectReferenceBase {
+public class CdmTraitReference extends CdmTraitReferenceBase {
 
   protected boolean resolvedArguments;
-  private CdmArgumentCollection arguments;
+  private final CdmArgumentCollection arguments;
   private boolean fromProperty;
+  private CdmTraitReference verb;
 
   public CdmTraitReference(final CdmCorpusContext ctx, final Object trait, final boolean simpleReference,
                            final boolean hasArguments) {
@@ -61,6 +62,11 @@ public class CdmTraitReference extends CdmObjectReferenceBase {
         }
       }
     }
+    if (this.verb != null) {
+      this.verb.setOwner(this);
+      if (this.verb.visit(pathFrom + "/verb/", preChildren, postChildren))
+      return true;
+    }
     return result;
   }
 
@@ -84,6 +90,20 @@ public class CdmTraitReference extends CdmObjectReferenceBase {
     this.fromProperty = value;
   }
 
+  /**
+   * 
+   * Gets or sets a reference to a trait used to describe the 'verb' explaining how the trait's meaning should be applied to the 
+   * object that holds this traitReference. This optional property can override the meaning of any defaultVerb that could be part of the 
+   * referenced trait's definition
+   */
+  public CdmTraitReference getVerb() {
+    return this.verb;
+  }
+
+  public void setVerb(final CdmTraitReference value) {
+    this.verb = value;
+  }
+
   public Object fetchArgumentValue(String name) {
     if (this.getArguments() == null) {
       return null;
@@ -93,7 +113,7 @@ public class CdmTraitReference extends CdmObjectReferenceBase {
     for (int iArgSet = 0; iArgSet < lArgSet; iArgSet++) {
       final CdmArgumentDefinition arg = this.getArguments().get(iArgSet);
       final String argName = arg.getName();
-      if (argName == name) {
+      if (argName != null && argName.equals(name)) {
         return arg.getValue();
       }
       // Special case with only one argument and no name give, make a big assumption that this
@@ -124,6 +144,15 @@ public class CdmTraitReference extends CdmObjectReferenceBase {
     }
   }
 
+  @Override
+  public long getMinimumSemanticVersion()
+  {
+      if (this.verb != null || this.getAppliedTraits() != null && this.getAppliedTraits().size() > 0) {
+          return CdmObjectBase.semanticVersionStringToNumber(CdmObjectBase.getJsonSchemaSemanticVersionTraitsOnTraits());
+      }
+      return super.getMinimumSemanticVersion();
+  }
+
   /**
    * @deprecated This function is extremely likely to be removed in the public interface, and not
    * meant to be called externally at all. Please refrain from using it.
@@ -151,14 +180,7 @@ public class CdmTraitReference extends CdmObjectReferenceBase {
       rtsTrait = trait.fetchResolvedTraits(resOpt);
     }
 
-    final boolean cacheByPath = trait.thisIsKnownToHaveParameters == null || !trait.thisIsKnownToHaveParameters;
-    String cacheTag = ctx.getCorpus()
-        .createDefinitionCacheTag(resOpt, this, kind, "", cacheByPath, trait.getAtCorpusPath());
-    Object rtsResult = null;
-
-    if (cacheTag != null) {
-      rtsResult = ctx.getCache().get(cacheTag);
-    }
+    ResolvedTraitSet rtsResult = null;
 
     // Store the previous reference symbol set, we will need to add it with
     // children found from the constructResolvedTraits call.
@@ -169,87 +191,74 @@ public class CdmTraitReference extends CdmObjectReferenceBase {
 
     resOpt.setSymbolRefSet(new SymbolSet());
 
-    // If not, then make one and save it.
-    if (rtsResult == null) {
-      // Get the set of resolutions, should just be this one trait.
-      if (rtsTrait == null) {
-        // Store current symbol ref set.
-        final SymbolSet newSymbolRefSet = resOpt.getSymbolRefSet();
-        resOpt.setSymbolRefSet(new SymbolSet());
+    // Get the set of resolutions, should just be this one trait.
+    if (rtsTrait == null) {
+      // Store current symbol ref set.
+      final SymbolSet newSymbolRefSet = resOpt.getSymbolRefSet();
+      resOpt.setSymbolRefSet(new SymbolSet());
 
-        rtsTrait = trait.fetchResolvedTraits(resOpt);
+      rtsTrait = trait.fetchResolvedTraits(resOpt);
 
-        // Bubble up symbol reference set from children.
-        if (newSymbolRefSet != null) {
-          newSymbolRefSet.merge(resOpt.getSymbolRefSet());
-        }
-
-        resOpt.setSymbolRefSet(newSymbolRefSet);
+      // Bubble up symbol reference set from children.
+      if (newSymbolRefSet != null) {
+        newSymbolRefSet.merge(resOpt.getSymbolRefSet());
       }
 
-      if (rtsTrait != null) {
-        rtsResult = rtsTrait.deepCopy();
-      }
-
-      // Now if there are argument for this application, set the values in the array.
-      if (this.getArguments() != null && rtsResult != null) {
-        // If never tried to line up arguments with parameters, do that.
-        if (!this.resolvedArguments) {
-          this.resolvedArguments = true;
-          final ParameterCollection param = trait.fetchAllParameters(resOpt);
-          CdmParameterDefinition paramFound;
-          Object aValue;
-
-          int iArg = 0;
-          if (this.getArguments() != null) {
-            for (final CdmArgumentDefinition argumentDef : this.getArguments()) {
-              try {
-                paramFound = param.resolveParameter(iArg, argumentDef.getName());
-              } catch (final CdmException e) {
-                throw new RuntimeException();
-              }
-
-              argumentDef.setResolvedParameter(paramFound);
-              aValue = argumentDef.getValue();
-              ctx.getCorpus().constTypeCheck(resOpt, this.getInDocument(), paramFound, aValue);
-              argumentDef.setValue(aValue);
-              iArg++;
-            }
-          }
-        }
-        if (this.getArguments() != null) {
-          for (final CdmArgumentDefinition argumentDef : this.getArguments()) {
-            ((ResolvedTraitSet) rtsResult).setParameterValueFromArgument(trait, argumentDef);
-          }
-        }
-      }
-
-      // Register set of possible symbols.
-      ctx.getCorpus()
-          .registerDefinitionReferenceSymbols(this.fetchObjectDefinition(resOpt), kind,
-              resOpt.getSymbolRefSet());
-
-      // Get the new getCache() tag now that we have the list of symbols.
-      cacheTag = ctx.getCorpus()
-          .createDefinitionCacheTag(resOpt, this, kind, "", cacheByPath, trait.getAtCorpusPath());
-      if (cacheTag != null && cacheTag.trim().length() > 0) {
-        ctx.getCache().put(cacheTag, rtsResult);
-      }
-    } else {
-      // Cache was found.
-      // Get the SymbolSet for this cached object.
-      final String key = CdmCorpusDefinition.createCacheKeyFromObject(this, kind);
-      final SymbolSet tempDocRefSet = ctx.getCorpus().getDefinitionReferenceSymbols()
-          .get(key);
-
-      resOpt.setSymbolRefSet(tempDocRefSet);
+      resOpt.setSymbolRefSet(newSymbolRefSet);
     }
+
+    if (rtsTrait != null) {
+      rtsResult = rtsTrait.deepCopy();
+    }
+
+    // Now if there are argument for this application, set the values in the array.
+    if (this.getArguments() != null && rtsResult != null) {
+      // If never tried to line up arguments with parameters, do that.
+      if (!this.resolvedArguments) {
+        this.resolvedArguments = true;
+        final ParameterCollection param = trait.fetchAllParameters(resOpt);
+        CdmParameterDefinition paramFound;
+
+        int argumentIndex = 0;
+        for (final CdmArgumentDefinition argumentDef : this.getArguments()) {
+          try {
+            paramFound = param.resolveParameter(argumentIndex, argumentDef.getName());
+          } catch (final CdmException e) {
+            throw new RuntimeException();
+          }
+
+          argumentDef.setResolvedParameter(paramFound);
+          Object argumentValue = paramFound.constTypeCheck(resOpt, this.getInDocument(), argumentDef.getValue());
+          argumentDef.setValue(argumentValue);
+          argumentIndex++;
+        }
+      }
+
+      for (final CdmArgumentDefinition argumentDef : this.getArguments()) {
+        rtsResult.setParameterValueFromArgument(trait, argumentDef);
+      }
+    }
+
+    // if an explicit verb is set, remember this. don't resolve that verb trait, cuz that sounds nuts.
+    if (this.verb != null) {
+        rtsResult.setExplicitVerb(trait, this.verb);
+    }
+    // if a collection of meta traits exist, save on the resolved but don't resolve these. again, nuts
+    if (this.getAppliedTraits() != null && this.getAppliedTraits().getCount() > 0) {
+        rtsResult.setMetaTraits(trait, this.getAppliedTraits().allItems);
+    }
+   
+
+    // Register set of possible symbols.
+    ctx.getCorpus()
+        .registerDefinitionReferenceSymbols(this.fetchObjectDefinition(resOpt), kind,
+            resOpt.getSymbolRefSet());
 
     // Merge child document set with current.
     currSymRefSet.merge(resOpt.getSymbolRefSet());
     resOpt.setSymbolRefSet(currSymRefSet);
 
-    return (ResolvedTraitSet) rtsResult;
+    return rtsResult;
   }
 
   /**
@@ -290,14 +299,15 @@ public class CdmTraitReference extends CdmObjectReferenceBase {
       copy.getArguments().clear();
     }
 
-
     if (!simpleReference) {
       copy.resolvedArguments = this.resolvedArguments;
     }
 
     for (final CdmArgumentDefinition arg : this.arguments) {
-      copy.getArguments().add(arg);
+      copy.getArguments().add((CdmArgumentDefinition)arg.copy(resOpt));
     }
+
+    copy.setVerb((CdmTraitReference) (this.verb == null ? null : this.verb.copy(resOpt)));
 
     return copy;
   }

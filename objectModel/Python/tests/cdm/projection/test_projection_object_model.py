@@ -11,6 +11,7 @@ from cdm.objectmodel import CdmCorpusDefinition, CdmFolderDefinition, CdmProject
     CdmOperationCombineAttributes, CdmOperationRenameAttributes, CdmOperationReplaceAsForeignKey, CdmOperationIncludeAttributes, CdmObject
 from cdm.storage import LocalAdapter
 from tests.common import async_test, TestHelper
+from tests.utilities.projection_test_utils import ProjectionTestUtils
 
 
 class ProjectionObjectModelTest(unittest.TestCase):
@@ -22,7 +23,7 @@ class ProjectionObjectModelTest(unittest.TestCase):
     @async_test
     async def test_projection_using_object_model(self):
         """Basic test to save projection based entities and then try to reload them and validate that the projections were persisted correctly"""
-        corpus = TestHelper.get_local_corpus(self.tests_subpath, 'test_projection_using_object_model')
+        corpus = ProjectionTestUtils.get_local_corpus(self.tests_subpath, 'test_projection_using_object_model')
         corpus.storage.mount('local', LocalAdapter(TestHelper.get_actual_output_folder_path(self.tests_subpath, 'test_projection_using_object_model')))
         local_root = corpus.storage.fetch_root_folder('local')
         manifest_default = self._create_default_manifest(corpus, local_root)
@@ -88,7 +89,6 @@ class ProjectionObjectModelTest(unittest.TestCase):
         self.assertEqual(CdmOperationType.RENAME_ATTRIBUTES, operations[6].type)
         self.assertEqual(CdmOperationType.REPLACE_AS_FOREIGN_KEY, operations[7].type)
         self.assertEqual(CdmOperationType.INCLUDE_ATTRIBUTES, operations[8].type)
-
 
     def _create_default_manifest(self, corpus: 'CdmCorpusDefinition', local_root: 'CdmFolderDefinition') -> 'CdmManifestDefinition':
         """Create a default manifest"""
@@ -220,17 +220,17 @@ class ProjectionObjectModelTest(unittest.TestCase):
 
         # AddCountAttribute Operation
         add_count_attribute_op = CdmOperationAddCountAttribute(corpus.ctx)
-        add_count_attribute_op.count_attribute = corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF)
+        add_count_attribute_op.count_attribute = corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF, 'countAtt')
         projection.operations.append(add_count_attribute_op)
 
         # AddSupportingAttribute Operation
         add_supporting_attribute_op = CdmOperationAddSupportingAttribute(corpus.ctx)
-        add_supporting_attribute_op.supporting_attribute = corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF)
+        add_supporting_attribute_op.supporting_attribute = corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF, 'supportingAtt')
         projection.operations.append(add_supporting_attribute_op)
 
         # AddTypeAttribute Operation
         add_type_attribute_op = CdmOperationAddTypeAttribute(corpus.ctx)
-        add_type_attribute_op.type_attribute = corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF)
+        add_type_attribute_op.type_attribute = corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF, 'typeAtt')
         projection.operations.append(add_type_attribute_op)
 
         # ExcludeAttributes Operation
@@ -248,7 +248,7 @@ class ProjectionObjectModelTest(unittest.TestCase):
         # CombineAttributes Operation
         combine_attributes_op = CdmOperationCombineAttributes(corpus.ctx)
         combine_attributes_op.select = []
-        combine_attributes_op.merge_into = corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF)
+        combine_attributes_op.merge_into = corpus.make_object(CdmObjectType.TYPE_ATTRIBUTE_DEF, 'combineAtt')
         combine_attributes_op.select.append('testAttribute1')
         projection.operations.append(combine_attributes_op)
 

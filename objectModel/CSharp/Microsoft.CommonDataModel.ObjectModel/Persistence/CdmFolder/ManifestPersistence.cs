@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
@@ -9,12 +9,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
     using Microsoft.CommonDataModel.ObjectModel.Utilities;
     using Microsoft.CommonDataModel.ObjectModel.Utilities.Logging;
     using Newtonsoft.Json;
-    using Newtonsoft.Json.Linq;
     using System;
     using System.Linq;
 
     public class ManifestPersistence
     {
+        private static readonly string Tag = nameof(ManifestPersistence);
         /// <summary>
         /// Whether this persistence class has async methods.
         /// </summary>
@@ -28,9 +28,9 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
         public static CdmManifestDefinition FromObject(CdmCorpusContext ctx, string name, string nameSpace, string path, ManifestContent dataObj)
         {
             // Determine name of the manifest
-            var manifestName = !string.IsNullOrEmpty(dataObj.ManifestName) ? dataObj.ManifestName : dataObj.FolioName;
+            var manifestName = !StringUtils.IsBlankByCdmStandard(dataObj.ManifestName) ? dataObj.ManifestName : dataObj.FolioName;
             // We haven't found the name in the file, use one provided in the call but without the suffixes
-            if (string.IsNullOrEmpty(manifestName))
+            if (StringUtils.IsBlankByCdmStandard(manifestName))
                 manifestName = name.Replace(PersistenceLayer.ManifestExtension, "").Replace(PersistenceLayer.FolioExtension, "");
 
             var manifest = ctx.Corpus.MakeObject<CdmManifestDefinition>(CdmObjectType.ManifestDef, manifestName);
@@ -40,32 +40,29 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
             manifest.Namespace = nameSpace;
             manifest.Explanation = dataObj.Explanation;
 
-            if (!string.IsNullOrEmpty(dataObj.Schema))
+            if (!StringUtils.IsBlankByCdmStandard(dataObj.Schema))
                 manifest.Schema = dataObj.Schema;
-            if (DynamicObjectExtensions.HasProperty(dataObj, "JsonSchemaSemanticVersion") && !string.IsNullOrEmpty(dataObj.JsonSchemaSemanticVersion))
+            if (DynamicObjectExtensions.HasProperty(dataObj, "JsonSchemaSemanticVersion") && !StringUtils.IsBlankByCdmStandard(dataObj.JsonSchemaSemanticVersion))
             {
                 manifest.JsonSchemaSemanticVersion = dataObj.JsonSchemaSemanticVersion;
             }
 
-            if (!string.IsNullOrEmpty(dataObj.DocumentVersion))
+            if (!StringUtils.IsBlankByCdmStandard(dataObj.DocumentVersion))
             {
                 manifest.DocumentVersion = dataObj.DocumentVersion;
             }
 
-            if (!string.IsNullOrEmpty(dataObj.ManifestName))
+            if (!StringUtils.IsBlankByCdmStandard(dataObj.ManifestName))
             {
                 manifest.ManifestName = dataObj.ManifestName;
             }
-            else if (!string.IsNullOrEmpty(dataObj.FolioName))
+            else if (!StringUtils.IsBlankByCdmStandard(dataObj.FolioName))
             {
                 // Might be populated in the case of folio.cdm.json or manifest.cdm.json file.
                 manifest.ManifestName = dataObj.FolioName;
             }
 
-            if (dataObj.ExhibitsTraits != null)
-            {
-                Utils.AddListToCdmCollection(manifest.ExhibitsTraits, Utils.CreateTraitReferenceList(ctx, JArray.FromObject(dataObj.ExhibitsTraits)));
-            }
+            Utils.AddListToCdmCollection(manifest.ExhibitsTraits, Utils.CreateTraitReferenceList(ctx, dataObj.ExhibitsTraits));
 
             if (dataObj.Imports != null)
             {
@@ -113,26 +110,26 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
 
             if (dataObj.Entities != null)
             {
-                var fullPath = !string.IsNullOrEmpty(nameSpace) ? $"{nameSpace}:{path}" : path;
+                var fullPath = !StringUtils.IsBlankByCdmStandard(nameSpace) ? $"{nameSpace}:{path}" : path;
                 foreach (var entityObj in dataObj.Entities)
                 {
                     CdmEntityDeclarationDefinition entity = null;
 
                     if (entityObj["type"] != null)
                     {
-                       if (entityObj["type"].ToString() == EntityDeclarationDefinitionType.LocalEntity)
-                       {
+                        if (entityObj["type"].ToString() == EntityDeclarationDefinitionType.LocalEntity)
+                        {
                             entity = LocalEntityDeclarationPersistence.FromData(ctx, fullPath, entityObj);
-                       }
-                       else if (entityObj["type"].ToString() == EntityDeclarationDefinitionType.ReferencedEntity)
-                       {
+                        }
+                        else if (entityObj["type"].ToString() == EntityDeclarationDefinitionType.ReferencedEntity)
+                        {
                             entity = ReferencedEntityDeclarationPersistence.FromData(ctx, fullPath, entityObj);
-                       }
-                       else
-                       {
-                            Logger.Error(nameof(ManifestPersistence), ctx, "Couldn't find the type for entity declaration", nameof(FromObject));
-                       }
-                    } 
+                        }
+                        else
+                        {
+                            Logger.Error(ctx, Tag, nameof(FromObject), null, CdmLogCode.ErrPersistEntityDeclarationMissing, (string)entityObj["entityName"]);
+                        }
+                    }
                     else
                     {
                         // We see old structure of entity declaration, check for entity schema/declaration.
@@ -147,9 +144,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
                             entity = ReferencedEntityDeclarationPersistence.FromData(ctx, fullPath, entityObj);
                         }
                     }
-                    
+
                     manifest.Entities.Add(entity);
                 }
+
+                // Checks if incremental trait is needed from foundations.cdm.json
+                ImportFoundationsIfIncrementalPartitionTraitExist(manifest);
             }
 
             if (dataObj.Relationships != null)
@@ -181,12 +181,15 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
 
         public static CdmManifestDefinition FromData(CdmCorpusContext ctx, string docName, string jsonData, CdmFolderDefinition folder)
         {
-            var dataObj = JsonConvert.DeserializeObject<ManifestContent>(jsonData);
+            var dataObj = JsonConvert.DeserializeObject<ManifestContent>(jsonData, PersistenceLayer.SerializerSettings);
             return FromObject(ctx, docName, folder.Namespace, folder.FolderPath, dataObj);
         }
 
         public static ManifestContent ToData(CdmManifestDefinition instance, ResolveOptions resOpt, CopyOptions options)
         {
+            // Checks if incremental trait is needed from foundations.cdm.json
+            ImportFoundationsIfIncrementalPartitionTraitExist(instance);
+
             var documentContent = DocumentPersistence.ToData(instance, resOpt, options);
             var manifestContent = new ManifestContent()
             {
@@ -208,10 +211,37 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
 
             if (instance.Relationships != null && instance.Relationships.Count > 0)
             {
-                manifestContent.Relationships = instance.Relationships.Select(relationship => { return E2ERelationshipPersistence.ToData(relationship); }).ToList();
+                manifestContent.Relationships = instance.Relationships.Select(relationship => { return E2ERelationshipPersistence.ToData(relationship, resOpt, options); }).ToList();
             }
 
             return manifestContent;
+        }
+
+        /// <summary>
+        /// Checks if incremental trait is needed from foundations.cdm.json
+        /// </summary>
+        private static void ImportFoundationsIfIncrementalPartitionTraitExist(CdmManifestDefinition manifest)
+        {
+            if (manifest.Entities == null)
+            {
+                return;
+            }
+
+            foreach (var ent in manifest.Entities)
+            {
+                if (ent is CdmLocalEntityDeclarationDefinition localEntityDef)
+                {
+                    if (localEntityDef.IncrementalPartitions?.Count > 0 || localEntityDef.IncrementalPartitionPatterns?.Count > 0)
+                    {
+                        if (manifest.Imports.Item(Constants.FoundationsCorpusPath, checkMoniker: false) == null)
+                        {
+                            manifest.Imports.Add(Constants.FoundationsCorpusPath);
+                            // Find one is enough
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 }

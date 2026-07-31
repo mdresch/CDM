@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder.Types
@@ -55,6 +55,16 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder.Types
         /// Gets or sets the data partition patterns.
         /// </summary>
         public List<DataPartitionPattern> DataPartitionPatterns { get; set; }
+
+        /// <summary>
+        /// Gets or sets the incremental partitions.
+        /// </summary>
+        public List<DataPartition> IncrementalPartitions { get; set; }
+
+        /// <summary>
+        /// Gets or sets the incremental partition patterns.
+        /// </summary>
+        public List<DataPartitionPattern> IncrementalPartitionPatterns { get; set; }
 
         /// <summary>
         /// The last file status check time.

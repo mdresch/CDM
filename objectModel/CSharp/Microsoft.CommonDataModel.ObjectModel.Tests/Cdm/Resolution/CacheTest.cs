@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using Microsoft.CommonDataModel.ObjectModel.Cdm;
+using Microsoft.CommonDataModel.ObjectModel.Enums;
 using Microsoft.CommonDataModel.ObjectModel.Utilities;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Collections.Generic;
@@ -16,7 +17,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
         /// <summary>
         /// The path between TestDataPath and TestName.
         /// </summary>
-        private string testsSubpath = Path.Combine("Cdm", "Resolution", "Cache");
+        private string testsSubpath = Path.Combine("Cdm", "Resolution", "CacheTest");
 
         /// <summary>
         /// The TestName for all tests here
@@ -30,7 +31,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
         [TestMethod]
         public async Task TestMaxDepthCached()
         {
-            CdmCorpusDefinition cdmCorpus = TestHelper.GetLocalCorpus(testsSubpath, testPath);
+            var expectedLogCodes = new HashSet<CdmLogCode> { CdmLogCode.WarnMaxDepthExceeded };
+            CdmCorpusDefinition cdmCorpus = TestHelper.GetLocalCorpus(testsSubpath, testPath, expectedCodes: expectedLogCodes);
             CdmEntityDefinition aEnt = await cdmCorpus.FetchObjectAsync<CdmEntityDefinition>("A.cdm.json/A");
             CdmEntityDefinition bEnt = await cdmCorpus.FetchObjectAsync<CdmEntityDefinition>("B.cdm.json/B");
             CdmEntityDefinition cEnt = await cdmCorpus.FetchObjectAsync<CdmEntityDefinition>("C.cdm.json/C");
@@ -52,10 +54,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
             CdmAttributeGroupDefinition bAttInA = ((CdmAttributeGroupDefinition)((CdmAttributeGroupReference)resA.Attributes[1]).ExplicitReference);
             CdmAttributeGroupDefinition cAttInA = ((CdmAttributeGroupDefinition)((CdmAttributeGroupReference)(bAttInA.Members[1])).ExplicitReference);
             CdmAttributeGroupDefinition dAttInA = ((CdmAttributeGroupDefinition)((CdmAttributeGroupReference)(cAttInA.Members[1])).ExplicitReference);
-            Assert.AreEqual(dAttInA.Members.Count, 1);
+            Assert.AreEqual(1, dAttInA.Members.Count);
             // check that the attribute in D is a foreign key attribute
             CdmTypeAttributeDefinition dIdAttFromA = (CdmTypeAttributeDefinition)(dAttInA.Members[0]);
-            Assert.AreEqual(dIdAttFromA.Name, "dId");
+            Assert.AreEqual("dId", dIdAttFromA.Name);
             Assert.IsNotNull(dIdAttFromA.AppliedTraits.Item("is.linkedEntity.identifier"));
 
             // check the attributes found in D from resolving B
@@ -64,7 +66,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
             Assert.AreEqual(dAttInB.Members.Count, 2);
             // check that the attribute in D is not a foreign key attribute
             CdmTypeAttributeDefinition dIdAttFromB = (CdmTypeAttributeDefinition)(dAttInB.Members[0]);
-            Assert.AreEqual(dIdAttFromB.Name, "dId");
+            Assert.AreEqual("dId", dIdAttFromB.Name);
             Assert.IsNull(dIdAttFromB.AppliedTraits.Item("is.linkedEntity.identifier"));
         }
 
@@ -75,7 +77,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
         [TestMethod]
         public async Task TestNonMaxDepthCached()
         {
-            CdmCorpusDefinition cdmCorpus = TestHelper.GetLocalCorpus(testsSubpath, "TestMaxDepth");
+            var expectedLogCodes = new HashSet<CdmLogCode> { CdmLogCode.WarnMaxDepthExceeded };
+            CdmCorpusDefinition cdmCorpus = TestHelper.GetLocalCorpus(testsSubpath, "TestMaxDepth", expectedCodes: expectedLogCodes);
             CdmEntityDefinition aEnt = await cdmCorpus.FetchObjectAsync<CdmEntityDefinition>("A.cdm.json/A");
             CdmEntityDefinition bEnt = await cdmCorpus.FetchObjectAsync<CdmEntityDefinition>("B.cdm.json/B");
             CdmEntityDefinition cEnt = await cdmCorpus.FetchObjectAsync<CdmEntityDefinition>("C.cdm.json/C");
@@ -97,10 +100,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
             CdmAttributeGroupDefinition bAttInA = ((CdmAttributeGroupDefinition)((CdmAttributeGroupReference)resA.Attributes[1]).ExplicitReference);
             CdmAttributeGroupDefinition cAttInA = ((CdmAttributeGroupDefinition)((CdmAttributeGroupReference)(bAttInA.Members[1])).ExplicitReference);
             CdmAttributeGroupDefinition dAttInA = ((CdmAttributeGroupDefinition)((CdmAttributeGroupReference)(cAttInA.Members[1])).ExplicitReference);
-            Assert.AreEqual(dAttInA.Members.Count, 1);
+            Assert.AreEqual(1, dAttInA.Members.Count);
             // check that the attribute in D is a foreign key attribute
             CdmTypeAttributeDefinition dIdAttFromA = (CdmTypeAttributeDefinition)(dAttInA.Members[0]);
-            Assert.AreEqual(dIdAttFromA.Name, "dId");
+            Assert.AreEqual("dId", dIdAttFromA.Name);
             Assert.IsNotNull(dIdAttFromA.AppliedTraits.Item("is.linkedEntity.identifier"));
 
             // check the attributes found in D from resolving B
@@ -109,7 +112,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm.Resolution
             Assert.AreEqual(dAttInB.Members.Count, 2);
             // check that the attribute in D is not a foreign key attribute
             CdmTypeAttributeDefinition dIdAttFromB = (CdmTypeAttributeDefinition)(dAttInB.Members[0]);
-            Assert.AreEqual(dIdAttFromB.Name, "dId");
+            Assert.AreEqual("dId", dIdAttFromB.Name);
             Assert.IsNull(dIdAttFromB.AppliedTraits.Item("is.linkedEntity.identifier"));
         }
     }

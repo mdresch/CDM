@@ -6,7 +6,7 @@ from typing import cast, Dict, List, Optional, Set, TYPE_CHECKING
 from cdm.resolvedmodel.parameter_value import ParameterValue
 
 if TYPE_CHECKING:
-    from cdm.objectmodel import CdmArgumentValue, CdmArgumentDefinition, CdmTraitDefinition, SpewCatcher
+    from cdm.objectmodel import CdmArgumentValue, CdmArgumentDefinition, CdmTraitDefinition, CdmTraitReference, CdmTraitReferenceBase, SpewCatcher
     from cdm.resolvedmodel import ResolvedTrait
     from cdm.utilities import ResolveOptions
 
@@ -15,7 +15,7 @@ class ResolvedTraitSet:
     def __init__(self, res_opt: 'ResolveOptions') -> None:
         from cdm.objectmodel import CdmObject
 
-        self.res_opt = res_opt.copy()  # type: ResolveOptions
+        self.res_opt = res_opt  # type: ResolveOptions
         self.rt_set = []  # type: List[ResolvedTrait]
         self.lookup_by_trait = {}  # type: Dict[CdmTraitDefinition, ResolvedTrait]
         self.has_elevated = False  # type: bool
@@ -40,6 +40,7 @@ class ResolvedTraitSet:
         if trait in trait_set_result.lookup_by_trait:
             rt_old = trait_set_result.lookup_by_trait[trait]
             av_old = rt_old.parameter_values.values if rt_old.parameter_values else None
+            was_set_old = rt_old.parameter_values.was_set if rt_old.parameter_values else None 
 
             if av and av_old:
                 # The new values take precedence.
@@ -49,9 +50,25 @@ class ResolvedTraitSet:
                             trait_set_result = trait_set_result.shallow_copy_with_exception(trait)
                             rt_old = trait_set_result.lookup_by_trait[trait]
                             av_old = rt_old.parameter_values.values
+                            was_set_old = rt_old.parameter_values.was_set
                             copy_on_write = False
 
                         av_old[i] = ParameterValue.fetch_replacement_value(self.res_opt, av_old[i], av[i], was_set[i])
+                        was_set_old[i] = (was_set_old[i] or was_set[i])
+
+            # is an explicit verb given with this reference?
+            if to_merge.explicit_verb is not None:
+                if copy_on_write:
+                    trait_set_result = trait_set_result.shallow_copy_with_exception(trait)
+                    rt_old = trait_set_result.lookup_by_trait[trait]
+                    copy_on_write = False
+                rt_old.explicit_verb = to_merge.explicit_verb
+            # are meta traits set on this newer reference?
+            if to_merge.meta_traits is not None and len(to_merge.meta_traits) > 0:
+                if copy_on_write:
+                    trait_set_result = trait_set_result.shallow_copy_with_exception(trait)
+                    rt_old = trait_set_result.lookup_by_trait[trait]
+                rt_old.meta_traits = to_merge.meta_traits.copy()
         else:
             if copy_on_write:
                 trait_set_result = trait_set_result.shallow_copy()
@@ -85,6 +102,15 @@ class ResolvedTraitSet:
                 return rt
 
         return None
+
+    def remove(self, res_opt: 'ResolveOptions', trait_name: str) -> bool:
+        rt = self.find(res_opt, trait_name)
+        if rt is not None:
+            self.lookup_by_trait.pop(rt.trait)
+            self.rt_set.remove(rt)
+            return True
+
+        return False
 
     def deep_copy(self) -> 'ResolvedTraitSet':
         copy = ResolvedTraitSet(self.res_opt)
@@ -127,15 +153,26 @@ class ResolvedTraitSet:
 
         return collection
 
+    def set_explicit_verb(self, trait: 'CdmTraitDefinition', verb: 'CdmTraitReference')->None:
+        res_trait = self.get(trait)
+        res_trait.explicit_verb = verb
+
+    def set_meta_traits(self, trait: 'CdmTraitDefinition', meta_traits: List['CdmTraitReferenceBase'] )->None:
+        res_trait = self.get(trait)
+        res_trait.meta_traits = meta_traits.copy()
+
     def set_parameter_value_from_argument(self, trait: 'CdmTraitDefinition', arg: 'CdmArgumentDefinition') -> None:
         res_trait = self.get(trait)
         if res_trait and res_trait.parameter_values:
             av = res_trait.parameter_values.values
             new_val = arg.value
             # Get the value index from the parameter collection given the parameter that this argument is setting.
-            idx = res_trait.parameter_values.index_of(arg._resolved_parameter)
-            av[idx] = ParameterValue.fetch_replacement_value(self.res_opt, av[idx], new_val, True)
-            res_trait.parameter_values.was_set[idx] = True
+            param_def = arg._get_parameter_def()
+            if param_def is not None:
+                res_trait.parameter_values.update_parameter_value(self.res_opt, param_def.get_name(), new_val)
+            else:
+                # debug
+                param_def = arg._get_parameter_def()
 
     def set_trait_parameter_value(self, res_opt: 'ResolveOptions', to_trait: 'CdmTraitDefinition',  # pylint: disable=unused-argument
                                   param_name: str, value: 'CdmArgumentValue') -> 'ResolvedTraitSet':

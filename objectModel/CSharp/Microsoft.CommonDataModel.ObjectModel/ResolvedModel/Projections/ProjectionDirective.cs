@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
@@ -16,44 +16,29 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
     internal sealed class ProjectionDirective
     {
         /// <summary>
-        /// Max Depth default
-        /// </summary>
-        const int MaxDepthDefault = 2;
-
-        /// <summary>
-        /// Max Depth if 'noMaxDepth' is defined
-        /// </summary>
-        const int MaxDepthHasNoMax = 32;
-
-        /// <summary>
         /// Resolution option used
         /// </summary>
         internal ResolveOptions ResOpt { get; private set; }
 
         /// <summary>
-        /// The calling referencing EntityDef or the EntityAttributeDef that contains this projection
+        /// The calling referencing EntityDef, the EntityAttributeDef, or the TypeAttributeDef that contains this projection
         /// </summary>
         internal CdmObjectDefinitionBase Owner { get; private set; }
 
         /// <summary>
-        /// The EntityRef to the owning EntityDef or EntityAttributeDef
+        /// The EntityRef to the owning EntityDef, EntityAttributeDef, or TypeAttributeDef
         /// </summary>
         internal CdmObjectReference OwnerRef { get; private set; }
 
         /// <summary>
-        /// Is Owner EntityDef or EntityAttributeDef
-        /// </summary>
-        internal CdmObjectType OwnerType { get; private set; }
-
-        /// <summary>
-        /// The entity attribute name or "{a/A}"
+        /// The entity/type attribute name or "{a/A}"
         /// This may pass through at each opertaion action/transformation
         /// </summary>
-        internal string OriginalSourceEntityAttributeName
+        internal string OriginalSourceAttributeName
         {
             get
             {
-                return (Owner?.ObjectType == CdmObjectType.EntityAttributeDef) ? Owner.GetName() : null;
+                return (Owner?.ObjectType == CdmObjectType.EntityAttributeDef || Owner?.ObjectType == CdmObjectType.TypeAttributeDef) ? Owner.GetName() : null;
             }
         }
 
@@ -67,11 +52,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
         /// For entity attribute - get if the source is polymorphic
         /// </summary>
         internal bool IsSourcePolymorphic { get; private set; }
-
-        /// <summary>
-        /// Current depth of reference
-        /// </summary>
-        internal int? CurrentDepth { get; set; }
 
         /// <summary>
         /// Has maximum depth override flag
@@ -115,7 +95,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
             // Owner information
             this.Owner = owner;
             this.OwnerRef = ownerRef;
-            this.OwnerType = (owner != null) ? owner.ObjectType : CdmObjectType.Error;
 
             if (owner?.ObjectType == CdmObjectType.EntityAttributeDef)
             {
@@ -127,7 +106,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
             }
             else
             {
-                // Entity Def
+                // Entity Def or Type Attribute
 
                 this.Cardinality = null;
                 this.IsSourcePolymorphic = false;
@@ -140,16 +119,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
             this.HasNoMaximumDepth = (resOpt.Directives?.Has("noMaxDepth") == true);
             this.IsArray = (resOpt.Directives?.Has("isArray") == true);
 
-            if (resOpt.DepthInfo != null)
-            {
-                this.CurrentDepth = (resOpt?.DepthInfo == null) ? 1 : resOpt.DepthInfo.CurrentDepth + 1;
-                resOpt.DepthInfo.CurrentDepth = (int)this.CurrentDepth;
-            }
-
-            // if noMaxDepth directive the max depth is 32 else defaults to 2
+            // if noMaxDepth directive the max depth is 32 else defaults to what was set by the user
             // these depths were arbitrary and were set for the resolution guidance
             // re-using the same for projections as well
-            this.MaximumDepth = this.HasNoMaximumDepth ? MaxDepthHasNoMax : MaxDepthDefault;
+            this.MaximumDepth = this.HasNoMaximumDepth ? DepthInfo.MaxDepthLimit : resOpt.MaxDepth;
         }
     }
 }

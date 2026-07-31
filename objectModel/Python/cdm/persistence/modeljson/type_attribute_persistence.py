@@ -42,12 +42,12 @@ class TypeAttributePersistence:
     async def to_data(instance: 'CdmTypeAttributeDefinition', res_opt: 'ResolveOptions', options: 'CopyOptions') -> 'Attribute':
         result = Attribute()
         result.name = instance.name
-        description = instance._fetch_property('description')
+        description = instance._get_property('description')
         if description:
             result.description = description
         result.dataType = TypeAttributePersistence._data_type_to_data(instance.data_format)
 
-        utils.process_traits_and_annotations_to_data(instance.ctx, result, instance.applied_traits)
+        await utils.process_traits_and_annotations_to_data(instance.ctx, result, instance.applied_traits)
 
         t2pm = TraitToPropertyMap(instance)
 

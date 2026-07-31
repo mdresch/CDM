@@ -20,20 +20,27 @@ import {
     ResolvedTraitSetBuilder,
     resolveOptions,
     SymbolSet,
-    VisitCallback
+    VisitCallback,
+    CdmTraitReferenceBase,
+    CdmDocumentDefinition,
+    CdmObjectBase
 } from '../internal';
 
-export class CdmTraitReference extends CdmObjectReferenceBase {
+export class CdmTraitReference extends CdmTraitReferenceBase {
     public arguments: CdmArgumentCollection;
     public isFromProperty: boolean;
+
+    /// <summary>
+    /// Gets or sets a reference to a trait used to describe the 'verb' explaining how the trait's meaning should be applied to the 
+    /// object that holds this traitReference. This optional property can override the meaning of any defaultVerb that could be part of the 
+    /// referenced trait's definition
+    /// </summary>
+    public verb: CdmTraitReference;
+
     /**
      * @internal
      */
     public resolvedArguments: boolean;
-
-    public static get objectType(): cdmObjectType {
-        return cdmObjectType.traitRef;
-    }
 
     constructor(ctx: CdmCorpusContext, trait: string | CdmTraitDefinition, simpleReference: boolean, hasArguments: boolean) {
         super(ctx, trait, simpleReference);
@@ -70,10 +77,11 @@ export class CdmTraitReference extends CdmObjectReferenceBase {
             }
             if (!simpleReference) {
                 for (const arg of this.arguments) {
-                    copy.arguments.push(arg);
+                    copy.arguments.push(arg.copy(resOpt));
                 }
                 copy.resolvedArguments = this.resolvedArguments;
             }
+            copy.verb = this.verb?.copy(resOpt) as CdmTraitReference;
 
             return copy;
         }
@@ -102,6 +110,13 @@ export class CdmTraitReference extends CdmObjectReferenceBase {
                 }
             }
 
+            if (this.verb !== undefined) {
+                this.verb.owner = this;
+                if (this.verb.visit(pathFrom + '/verb/', preChildren, postChildren)) {
+                    return true;
+                }
+            }
+
             return result;
         }
         // return p.measure(bodyCode);
@@ -111,7 +126,23 @@ export class CdmTraitReference extends CdmObjectReferenceBase {
         const finalArgs: Map<string, ArgumentValue> = new Map<string, ArgumentValue>();
         // get resolved traits does all the work, just clean up the answers
         const rts: ResolvedTraitSet = this.fetchResolvedTraits(resOpt);
-        if (!rts) {
+        if (!rts || rts.size !== 1) {
+            // well didn't get the traits. maybe imports are missing or maybe things are just not defined yet.
+            // this function will try to fake up some answers then from the arguments that are set on this reference only
+            if (this.arguments && this.arguments.length > 0) {
+                let unNamedCount: number = 0;
+                for (const arg of this.arguments)
+                {
+                    // if no arg name given, use the position in the list.
+                    let argName: string  = arg.name;
+                    if (!argName) {
+                        argName = unNamedCount.toString();
+                    }
+                    finalArgs.set(argName, arg.value);
+                    unNamedCount++;
+                }
+                return finalArgs;
+            }
             return undefined;
         }
         // there is only one resolved trait
@@ -146,6 +177,17 @@ export class CdmTraitReference extends CdmObjectReferenceBase {
     /**
      * @internal
      */
+    public getMinimumSemanticVersion() : number
+    {
+        if (this.verb !== undefined || this.appliedTraits !== undefined && this.appliedTraits.length > 0) {
+            return CdmObjectBase.semanticVersionStringToNumber(CdmObjectBase.jsonSchemaSemanticVersionTraitsOnTraits);
+        }
+        return super.getMinimumSemanticVersion();
+    }
+
+    /**
+     * @internal
+     */
     public fetchResolvedTraits(resOpt?: resolveOptions): ResolvedTraitSet {
         // let bodyCode = () =>
         {
@@ -169,76 +211,64 @@ export class CdmTraitReference extends CdmObjectReferenceBase {
                 rtsTrait = trait.fetchResolvedTraits(resOpt);
             }
 
-            let cacheByPath: boolean = true;
-            if (trait.thisIsKnownToHaveParameters) {
-                cacheByPath = !trait.thisIsKnownToHaveParameters;
-            }
-            let cacheTag: string = ctx.corpus.createDefinitionCacheTag(resOpt, this, kind, '', cacheByPath, trait.atCorpusPath);
-            let rtsResult: ResolvedTraitSet = cacheTag ? ctx.cache.get(cacheTag) : undefined;
+            let rtsResult: ResolvedTraitSet = undefined;
 
             // store the previous reference symbol set, we will need to add it with
             // children found from the constructResolvedTraits call
-            const currSymRefSet: SymbolSet = resOpt.symbolRefSet || new SymbolSet();
+            const currSymRefSet: SymbolSet = resOpt.symbolRefSet ?? new SymbolSet();
             resOpt.symbolRefSet = new SymbolSet();
 
-            // if not, then make one and save it
-            if (!rtsResult) {
-                // get the set of resolutions, should just be this one trait
-                if (!rtsTrait) {
-                    // store current doc ref set
-                    const newDocRefSet: SymbolSet = resOpt.symbolRefSet;
-                    resOpt.symbolRefSet = new SymbolSet();
+            // get the set of resolutions, should just be this one trait
+            if (!rtsTrait) {
+                // store current doc ref set
+                const newDocRefSet: SymbolSet = resOpt.symbolRefSet;
+                resOpt.symbolRefSet = new SymbolSet();
 
-                    rtsTrait = trait.fetchResolvedTraits(resOpt);
+                rtsTrait = trait.fetchResolvedTraits(resOpt);
 
-                    // bubble up symbol reference set from children
-                    if (newDocRefSet) {
-                        newDocRefSet.merge(resOpt.symbolRefSet);
-                    }
-                    resOpt.symbolRefSet = newDocRefSet;
+                // bubble up symbol reference set from children
+                if (newDocRefSet) {
+                    newDocRefSet.merge(resOpt.symbolRefSet);
                 }
-                if (rtsTrait) {
-                    rtsResult = rtsTrait.deepCopy();
-                }
-
-                // now if there are argument for this application, set the values in the array
-                if (this.arguments && rtsResult) {
-                    // if never tried to line up arguments with parameters, do that
-                    if (!this.resolvedArguments) {
-                        this.resolvedArguments = true;
-                        const params: ParameterCollection = trait.fetchAllParameters(resOpt);
-                        let paramFound: CdmParameterDefinition;
-                        let aValue: ArgumentValue;
-
-                        let iArg: number = 0;
-                        for (const argument of this.arguments) {
-                            paramFound = params.resolveParameter(iArg, argument.getName());
-                            argument.resolvedParameter = paramFound;
-                            aValue = argument.value;
-                            aValue = ctx.corpus.constTypeCheck(resOpt, this.inDocument, paramFound, aValue);
-                            argument.value = aValue;
-                            iArg++;
-                        }
-                    }
-                    for (const a of this.arguments) {
-                        rtsResult.setParameterValueFromArgument(trait, a);
-                    }
-                }
-
-                // register set of possible symbols
-                ctx.corpus.registerDefinitionReferenceSymbols(this.fetchObjectDefinition(resOpt), kind, resOpt.symbolRefSet);
-
-                // get the new cache tag now that we have the list of docs
-                cacheTag = ctx.corpus.createDefinitionCacheTag(resOpt, this, kind, '', cacheByPath, trait.atCorpusPath);
-                if (cacheTag) {
-                    ctx.cache.set(cacheTag, rtsResult);
-                }
-            } else {
-                // cache was found
-                // get the SymbolSet for this cached object
-                const key: string = CdmCorpusDefinition.createCacheKeyFromObject(this, kind);
-                resOpt.symbolRefSet = ctx.corpus.definitionReferenceSymbols.get(key);
+                resOpt.symbolRefSet = newDocRefSet;
             }
+            if (rtsTrait) {
+                rtsResult = rtsTrait.deepCopy();
+            }
+
+            // now if there are argument for this application, set the values in the array
+            if (this.arguments && rtsResult) {
+                // if never tried to line up arguments with parameters, do that
+                if (!this.resolvedArguments) {
+                    this.resolvedArguments = true;
+                    const params: ParameterCollection = trait.fetchAllParameters(resOpt);
+                    let paramFound: CdmParameterDefinition;
+
+                    let argumentIndex: number = 0;
+                    for (const argument of this.arguments) {
+                        paramFound = params.resolveParameter(argumentIndex, argument.getName());
+                        argument.resolvedParameter = paramFound;
+                        argument.value = paramFound.constTypeCheck(resOpt, this.inDocument, argument.value);
+                        argumentIndex++;
+                    }
+                }
+
+                for (const argument of this.arguments) {
+                    rtsResult.setParameterValueFromArgument(trait, argument);
+                }
+            }
+
+            // if an explicit verb is set, remember this. don't resolve that verb trait, cuz that sounds nuts.
+            if (this.verb !== undefined) {
+                rtsResult.setExplicitVerb(trait, this.verb);
+            }
+            // if a collection of meta traits exist, save on the resolved but don't resolve these. again, nuts
+            if (this.appliedTraits !== undefined && this.appliedTraits.length > 0) {
+                rtsResult.setMetaTraits(trait, this.appliedTraits.allItems);
+            }
+
+            // register set of possible symbols
+            ctx.corpus.registerDefinitionReferenceSymbols(this.fetchObjectDefinition(resOpt), kind, resOpt.symbolRefSet);
 
             // merge child document set with current
             currSymRefSet.merge(resOpt.symbolRefSet);

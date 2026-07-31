@@ -27,6 +27,8 @@ public class TypeAttribute {
     private Boolean valueConstrainedToList;
     private JsonNode defaultValue;
     private JsonNode resolutionGuidance;
+    private JsonNode cardinalitySettings;
+    private JsonNode projection;
 
     public String getExplanation() {
         return explanation;
@@ -186,5 +188,19 @@ public class TypeAttribute {
 
     public void setResolutionGuidance(final JsonNode resolutionGuidance) {
         this.resolutionGuidance = resolutionGuidance;
+    }
+
+    public JsonNode getCardinalitySettings() { return cardinalitySettings; }
+
+    public void setCardinalitySettings(final JsonNode cardinalitySettings) {
+        this.cardinalitySettings = cardinalitySettings;
+    }
+
+    public JsonNode getProjection() {
+        return projection;
+    }
+
+    public void setProjection(final JsonNode projection) {
+        this.projection = projection;
     }
 }

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Cdm
@@ -9,9 +9,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
     using Microsoft.CommonDataModel.ObjectModel.Utilities.Logging;
     using System;
     using System.Collections.Generic;
+    using System.Linq;
 
     public class CdmTraitDefinition : CdmObjectDefinitionBase
     {
+        private static readonly string Tag = nameof(CdmTraitDefinition);
+
         /// <summary>
         /// Gets or sets the trait name.
         /// </summary>
@@ -31,6 +34,14 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         private CdmCollection<CdmParameterDefinition> _hasParameters { get; set; }
 
         ParameterCollection AllParameters { get; set; }
+
+        /// <summary>
+        /// Gets or sets the default verb that should be assumed for uses of this trait when no verb property
+        /// is given in the trait reference. Note that the verb property is itself a trait reference because
+        /// verbs are described using traits. 
+        /// </summary>
+        public CdmTraitReference DefaultVerb { get; set; }
+
 
         private bool HasSetFlags;
 
@@ -97,7 +108,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             else
             {
                 copy = host as CdmTraitDefinition;
-                copy.Ctx = this.Ctx;
                 copy.TraitName = this.TraitName;
             }
 
@@ -105,7 +115,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             copy.AllParameters = null;
             copy.Elevated = this.Elevated;
             copy.Ugly = this.Ugly;
-            copy.AssociatedProperties = this.AssociatedProperties;
+            copy.AssociatedProperties = this.AssociatedProperties != null ? new List<String>(this.AssociatedProperties) : null;
+            copy.DefaultVerb = (CdmTraitReference)this.DefaultVerb?.Copy(resOpt);
 
             this.CopyDef(resOpt, copy);
             return copy;
@@ -120,18 +131,28 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         internal ParameterCollection FetchAllParameters(ResolveOptions resOpt)
         {
             if (this.AllParameters != null)
+            {
                 return this.AllParameters;
+            }
 
             // get parameters from base if there is one
             ParameterCollection prior = null;
             if (this.ExtendsTrait != null)
-                prior = this.ExtendsTrait.FetchObjectDefinition<CdmTraitDefinition>(resOpt).FetchAllParameters(resOpt);
+            {
+                var extDef = this.ExtendsTrait.FetchObjectDefinition<CdmTraitDefinition>(resOpt);
+                if (extDef == null)
+                {
+                    Logger.Error(this.Ctx, Tag, nameof(FetchAllParameters), this.AtCorpusPath, CdmLogCode.ErrResolveReferenceFailure, this.AtCorpusPath, "ExtendsTrait");
+                    return null;
+                }
+                prior = extDef.FetchAllParameters(resOpt);
+            }
             this.AllParameters = new ParameterCollection(prior);
             if (this.Parameters != null)
             {
-                foreach (CdmParameterDefinition element in this.Parameters)
+                foreach (CdmParameterDefinition parameter in this.Parameters)
                 {
-                    this.AllParameters.Add(element as CdmParameterDefinition);
+                    this.AllParameters.Add(parameter);
                 }
             }
             return this.AllParameters;
@@ -161,7 +182,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         {
             if (string.IsNullOrWhiteSpace(this.TraitName))
             {
-                Logger.Error(nameof(CdmTraitDefinition), this.Ctx, Errors.ValidateErrorString(this.AtCorpusPath, new List<string> { "TraitName" }), nameof(Validate));
+                IEnumerable<string> missingFields = new List<string> { "TraitName" };
+                Logger.Error(this.Ctx, Tag, nameof(Validate), this.AtCorpusPath, CdmLogCode.ErrValdnIntegrityCheckFailure, this.AtCorpusPath, string.Join(", ", missingFields.Select((s) =>$"'{s}'")));
                 return false;
             }
             return true;
@@ -170,16 +192,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <inheritdoc />
         public override bool Visit(string pathFrom, VisitCallback preChildren, VisitCallback postChildren)
         {
-            string path = string.Empty;
-            if (this.Ctx.Corpus.blockDeclaredPathChanges == false)
-            {
-                path = this.DeclaredPath;
-                if (string.IsNullOrEmpty(path))
-                {
-                    path = pathFrom + this.TraitName;
-                    this.DeclaredPath = path;
-                }
-            }
+            string path = this.UpdateDeclaredPath(pathFrom);
 
             if (preChildren != null && preChildren.Invoke(this, path))
                 return false;
@@ -192,9 +205,29 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             if (this.Parameters != null)
                 if (this.Parameters.VisitList(path + "/hasParameters/", preChildren, postChildren))
                     return true;
+
+            if (this.DefaultVerb != null)
+            {
+                this.DefaultVerb.Owner = this;
+                if (this.DefaultVerb.Visit(path + "/defaultVerb/", preChildren, postChildren))
+                    return true;
+            }
+
+            if (this.VisitDef(path, preChildren, postChildren))
+                return true;
+
             if (postChildren != null && postChildren.Invoke(this, path))
                 return true;
             return false;
+        }
+
+        internal override long GetMinimumSemanticVersion()
+        {
+            if (this.DefaultVerb != null || this.ExhibitsTraits != null && this.ExhibitsTraits.Count > 0)
+            {
+                return CdmObjectBase.SemanticVersionStringToNumber(CdmDocumentDefinition.JsonSchemaSemanticVersionTraitsOnTraits);
+            }
+            return base.GetMinimumSemanticVersion();
         }
 
         internal override ResolvedTraitSet FetchResolvedTraits(ResolveOptions resOpt = null)
@@ -208,9 +241,9 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             ResolveContext ctx = this.Ctx as ResolveContext;
             // this may happen 0, 1 or 2 times. so make it fast
             CdmTraitDefinition baseTrait = null;
-            ResolvedTraitSet baseRts = null;
+            ResolvedTraitSet baseRts;
             List<dynamic> baseValues = null;
-            System.Action GetBaseInfo = () =>
+            Action GetBaseInfo = () =>
             {
                 if (this.ExtendsTrait != null)
                 {
@@ -222,7 +255,9 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                         {
                             ParameterValueSet basePv = baseRts.Get(baseTrait)?.ParameterValues;
                             if (basePv != null)
+                            {
                                 baseValues = basePv.Values;
+                            }
                         }
                     }
                 }
@@ -245,13 +280,14 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 cacheTagExtra = this.ExtendsTrait.Id.ToString();
 
             string cacheTag = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind, cacheTagExtra);
-            dynamic rtsResultDynamic = null;
+            ResolvedTraitSet rtsResult = null;
             if (cacheTag != null)
-                ctx.Cache.TryGetValue(cacheTag, out rtsResultDynamic);
-            ResolvedTraitSet rtsResult = rtsResultDynamic as ResolvedTraitSet;
+            {
+                ctx.TraitCache.TryGetValue(cacheTag, out rtsResult);
+            }
 
             // store the previous reference symbol set, we will need to add it with
-            // children found from the constructResolvedTraits call 
+            // children found from the constructResolvedTraits call
             SymbolSet currSymbolRefSet = resOpt.SymbolRefSet;
             if (currSymbolRefSet == null)
                 currSymbolRefSet = new SymbolSet();
@@ -276,43 +312,50 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                     }
                 }
                 this.HasSetFlags = true;
-                ParameterCollection pc = this.FetchAllParameters(resOpt);
-                List<dynamic> av = new List<dynamic>();
-                List<bool> wasSet = new List<bool>();
-                this.ThisIsKnownToHaveParameters = pc.Sequence.Count > 0;
-                for (int i = 0; i < pc.Sequence.Count; i++)
+                ParameterCollection parameterCollection = this.FetchAllParameters(resOpt);
+                // a null probably means a failure to resolve a symbol, for compat just ignore this trait in the set. an error will fire
+                if (parameterCollection != null)
                 {
-                    // either use the default value or (higher precidence) the value taken from the base reference
-                    dynamic value = (pc.Sequence[i] as CdmParameterDefinition).DefaultValue;
-                    dynamic baseValue = null;
-                    if (baseValues != null && i < baseValues.Count)
+                    List<dynamic> argumentValues = new List<dynamic>();
+                    List<bool> wasSet = new List<bool>();
+                    this.ThisIsKnownToHaveParameters = parameterCollection.Sequence.Count > 0;
+                    for (int i = 0; i < parameterCollection.Sequence.Count; i++)
                     {
-                        baseValue = baseValues[i];
-                        if (baseValue != null)
-                            value = baseValue;
+                        // either use the default value or (higher precidence) the value taken from the base reference
+                        dynamic value = parameterCollection.Sequence[i].DefaultValue;
+                        if (baseValues != null && i < baseValues.Count)
+                        {
+                            dynamic baseValue = baseValues[i];
+                            if (baseValue != null)
+                            {
+                                value = baseValue;
+                            }
+                        }
+                        argumentValues.Add(value);
+                        wasSet.Add(false);
                     }
-                    av.Add(value);
-                    wasSet.Add(false);
-                }
 
-                // save it
-                ResolvedTrait resTrait = new ResolvedTrait(this, pc, av, wasSet);
-                rtsResult = new ResolvedTraitSet(resOpt);
-                rtsResult.Merge(resTrait, false);
+                    // save it
+                    ResolvedTrait resTrait = new ResolvedTrait(this, parameterCollection, argumentValues, wasSet, null, null);
+                    rtsResult = new ResolvedTraitSet(resOpt);
+                    rtsResult.Merge(resTrait, false);
+                }
 
                 // register set of possible symbols
                 ctx.Corpus.RegisterDefinitionReferenceSymbols(this.FetchObjectDefinition<CdmObjectDefinitionBase>(resOpt), kind, resOpt.SymbolRefSet);
                 // get the new cache tag now that we have the list of docs
                 cacheTag = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind, cacheTagExtra);
                 if (!string.IsNullOrWhiteSpace(cacheTag))
-                    ctx.Cache[cacheTag] = rtsResult;
+                {
+                    ctx.TraitCache[cacheTag] = rtsResult;
+                }
             }
             else
             {
                 // cache found
                 // get the SymbolSet for this cached object
                 string key = CdmCorpusDefinition.CreateCacheKeyFromObject(this, kind);
-                ((CdmCorpusDefinition)ctx.Corpus).DefinitionReferenceSymbols.TryGetValue(key, out SymbolSet tempSymbolRefSet);
+                ctx.Corpus.DefinitionReferenceSymbols.TryGetValue(key, out SymbolSet tempSymbolRefSet);
                 resOpt.SymbolRefSet = tempSymbolRefSet;
             }
             // merge child document set with current

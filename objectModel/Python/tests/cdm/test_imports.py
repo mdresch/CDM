@@ -2,13 +2,17 @@
 # Licensed under the MIT License. See License.txt in the project root for license information.
 
 import os
+from typing import TYPE_CHECKING
 import unittest
 
-from cdm.enums import ImportsLoadStrategy
+from cdm.enums import ImportsLoadStrategy, CdmLogCode, CdmRelationshipDiscoveryStyle
 from cdm.storage import LocalAdapter
-from cdm.utilities import ResolveOptions
+from cdm.utilities import ResolveOptions, CopyOptions
 
 from tests.common import async_test, TestHelper
+
+if TYPE_CHECKING:
+    from cdm.objectmodel import CdmDocumentDefinition, CdmManifestDefinition
 
 
 class ImportsTests(unittest.TestCase):
@@ -17,8 +21,10 @@ class ImportsTests(unittest.TestCase):
     @async_test
     async def test_entity_with_missing_import(self):
         """The path between TestDataPath and TestName."""
-        test_name = 'TestEntityWithMissingImport'
-        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
+        test_name = 'test_entity_with_missing_import'
+        expected_log_codes = { CdmLogCode.ERR_PERSIST_FILE_READ_FAILURE, CdmLogCode.WARN_RESOLVE_IMPORT_FAILED, CdmLogCode.WARN_DOC_IMPORT_NOT_LOADED }
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name, expected_codes=expected_log_codes)
+
         res_opt = ResolveOptions()
         res_opt.imports_load_strategy = ImportsLoadStrategy.LOAD
 
@@ -30,8 +36,10 @@ class ImportsTests(unittest.TestCase):
 
     @async_test
     async def test_entity_with_missing_nested_imports_async(self):
-        test_name = 'TestEntityWithMissingNestedImportsAsync'
-        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
+        test_name = 'test_entity_with_missing_nested_imports_async'
+        expected_log_codes = { CdmLogCode.ERR_PERSIST_FILE_READ_FAILURE, CdmLogCode.WARN_RESOLVE_IMPORT_FAILED, CdmLogCode.WARN_DOC_IMPORT_NOT_LOADED }
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name, expected_codes=expected_log_codes)
+
         res_opt = ResolveOptions()
         res_opt.imports_load_strategy = ImportsLoadStrategy.LOAD
 
@@ -46,8 +54,10 @@ class ImportsTests(unittest.TestCase):
 
     @async_test
     async def test_entity_with_same_imports_async(self):
-        test_name = 'TestEntityWithSameImportsAsync'
-        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
+        test_name = 'test_entity_with_same_imports_async'
+        expected_log_codes = { CdmLogCode.ERR_PERSIST_FILE_READ_FAILURE, CdmLogCode.WARN_RESOLVE_IMPORT_FAILED, CdmLogCode.WARN_DOC_IMPORT_NOT_LOADED }
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name, expected_codes=expected_log_codes)
+
         res_opt = ResolveOptions()
         res_opt.imports_load_strategy = ImportsLoadStrategy.LOAD
 
@@ -63,9 +73,10 @@ class ImportsTests(unittest.TestCase):
     @async_test
     async def test_non_existing_adapter_namespace(self):
         """Test an import with a non-existing namespace name."""
-        test_name = 'TestNonExistingAdapterNamespace'
+        test_name = 'test_non_existing_adapter_namespace'
         local_adapter = LocalAdapter(TestHelper.get_input_folder_path(self.tests_subpath, test_name))
-        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
+        expected_log_codes = { CdmLogCode.ERR_PERSIST_FILE_READ_FAILURE }
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name, expected_codes=expected_log_codes)
 
         # Register it as a 'local' adapter.
         corpus.storage.mount('erp', local_adapter)
@@ -81,7 +92,7 @@ class ImportsTests(unittest.TestCase):
     @async_test
     async def test_loading_same_imports_async(self):
         """Testing docs that load the same import"""
-        test_name = 'TestLoadingSameImportsAsync'
+        test_name = 'test_loading_same_imports_async'
         corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
         res_opt = ResolveOptions()
         res_opt.imports_load_strategy = ImportsLoadStrategy.LOAD
@@ -102,10 +113,32 @@ class ImportsTests(unittest.TestCase):
         self.assertIsNotNone(second_import.imports[0]._document)
 
     @async_test
+    async def test_prioritizing_imports_after_edit(self):
+        """Testing that import priorities update correctly when imports are changed"""
+        test_name = 'test_prioritizing_imports_after_edit'
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
+
+        document = await corpus.fetch_object_async('local:/mainDoc.cdm.json')  # type: CdmDocumentDefinition
+        res_opt = ResolveOptions(document)
+        await document.refresh_async(res_opt)
+
+        self.assertEqual(0, len(document.imports))
+        # the current doc itself is added to the list of priorities
+        self.assertEqual(1, len(document._import_priorities.import_priority))
+
+        document.imports.append('importDoc.cdm.json', True)
+        await document.refresh_async(res_opt)
+
+        self.assertEqual(1, len(document.imports))
+        self.assertEqual(2, len(document._import_priorities.import_priority))
+
+    @async_test
     async def test_loading_same_missing_imports_async(self):
         """Testing docs that load the same import"""
-        test_name = 'TestLoadingSameMissingImportsAsync'
-        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
+        test_name = 'test_loading_same_missing_imports_async'
+        expected_log_codes = { CdmLogCode.ERR_PERSIST_FILE_READ_FAILURE, CdmLogCode.WARN_RESOLVE_IMPORT_FAILED, CdmLogCode.WARN_DOC_IMPORT_NOT_LOADED }
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name, expected_codes=expected_log_codes)
+
         res_opt = ResolveOptions()
         res_opt.imports_load_strategy = ImportsLoadStrategy.LOAD
 
@@ -126,7 +159,7 @@ class ImportsTests(unittest.TestCase):
     @async_test
     async def test_loading_already_present_imports_async(self):
         """Testing docs that load the same import"""
-        test_name = 'TestLoadingAlreadyPresentImportsAsync'
+        test_name = 'test_loading_already_present_imports_async'
         corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
         res_opt = ResolveOptions()
         res_opt.imports_load_strategy = ImportsLoadStrategy.LOAD
@@ -149,3 +182,35 @@ class ImportsTests(unittest.TestCase):
         self.assertIsNotNone(second_import_doc)
 
         self.assertIs(import_doc, second_import_doc)
+
+    @async_test
+    async def test_imports_for_rel_elevated_purpose_traits(self):
+        """
+        Testing that import for elevated purpose traits for relationships are added.
+        """
+        test_name = 'test_imports_for_rel_elevated_purpose_traits'
+        corpus = TestHelper.get_local_corpus(self.tests_subpath, test_name)
+        root_manifest = await corpus.fetch_object_async('local:/default.manifest.cdm.json')  # type: 'CdmManifestDefinition'
+        sub_manifest = await corpus.fetch_object_async(root_manifest.sub_manifests[0].definition)
+
+        await corpus.calculate_entity_graph_async(root_manifest)
+        await root_manifest.populate_manifest_relationships_async(CdmRelationshipDiscoveryStyle.EXCLUSIVE)
+
+        self.assertEqual('specialized/Gold.cdm.json', root_manifest.imports[0].corpus_path)
+        self.assertEqual('/Lead.cdm.json', sub_manifest.imports[0].corpus_path)
+
+        corpus.storage.fetch_root_folder('output').documents.append(root_manifest)
+        corpus.storage.fetch_root_folder('output').documents.append(sub_manifest)
+        copy_options = CopyOptions()
+        copy_options.save_config_file = False
+        await root_manifest.save_as_async('output:/default.manifest.cdm.json', False, copy_options)
+        # "acct.trait" in Acct.cdm.json. relationships in the manifests contain these 2 traits, 
+        # so the manifest should import these two entity documents, but Lead.cdm.json imports Acct.cdm.json. 
+        # Thus, the manifest can only import Lead.cdm.json
+        await sub_manifest.save_as_async('output:/default-submanifest.manifest.cdm.json', False, copy_options)
+
+        TestHelper.compare_folder_files_equality(
+            TestHelper.get_expected_output_folder_path(self.tests_subpath, test_name),
+            TestHelper.get_actual_output_folder_path(self.tests_subpath, test_name))
+
+

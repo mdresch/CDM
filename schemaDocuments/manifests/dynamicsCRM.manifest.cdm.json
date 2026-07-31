@@ -1,7 +1,12 @@
 {
+  "documentVersion": "1.4",
   "$schema": "CdmManifest.cdm.json",
   "jsonSchemaSemanticVersion": "1.0.0",
-  "imports": [],
+  "imports": [
+    {
+      "corpusPath": "/core/cdsConcepts.cdm.json"
+    }
+  ],
   "manifestName": "Supporting Entities",
   "entities": [
     {
@@ -271,7 +276,10 @@
       "fromEntity": "/core/applicationCommon/Address.cdm.json/Address",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Address.cdm.json/Address",
@@ -307,7 +315,10 @@
       "fromEntity": "/core/applicationCommon/Appointment.cdm.json/Appointment",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Appointment.cdm.json/Appointment",
@@ -529,7 +540,10 @@
       "fromEntity": "/core/applicationCommon/Connection.cdm.json/Connection",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Connection.cdm.json/Connection",
@@ -805,7 +819,10 @@
       "fromEntity": "/core/applicationCommon/CustomerRelationship.cdm.json/CustomerRelationship",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/CustomerRelationship.cdm.json/CustomerRelationship",
@@ -823,7 +840,10 @@
       "fromEntity": "/core/applicationCommon/EmailSignature.cdm.json/EmailSignature",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Feedback.cdm.json/Feedback",
@@ -835,13 +855,19 @@
       "fromEntity": "/core/applicationCommon/Feedback.cdm.json/Feedback",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Goal.cdm.json/Goal",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Goal.cdm.json/Goal",
@@ -883,7 +909,10 @@
       "fromEntity": "/core/applicationCommon/KnowledgeArticleViews.cdm.json/KnowledgeArticleViews",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Note.cdm.json/Note",
@@ -901,7 +930,10 @@
       "fromEntity": "/core/applicationCommon/Note.cdm.json/Note",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Note.cdm.json/Note",
@@ -919,7 +951,10 @@
       "fromEntity": "/core/applicationCommon/Queue.cdm.json/Queue",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/QueueItem.cdm.json/QueueItem",
@@ -937,7 +972,10 @@
       "fromEntity": "/core/applicationCommon/QueueItem.cdm.json/QueueItem",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/QueueItem.cdm.json/QueueItem",
@@ -955,7 +993,10 @@
       "fromEntity": "/core/applicationCommon/SLA.cdm.json/SLA",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/SLAItem.cdm.json/SLAItem",
@@ -967,13 +1008,19 @@
       "fromEntity": "/core/applicationCommon/SLAItem.cdm.json/SLAItem",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/SocialProfile.cdm.json/SocialProfile",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/SocialProfile.cdm.json/SocialProfile",
@@ -991,7 +1038,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResource.cdm.json/BookableResource",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResource.cdm.json/BookableResource",
@@ -1003,7 +1053,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceBooking.cdm.json/BookableResourceBooking",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceBooking.cdm.json/BookableResourceBooking",
@@ -1015,7 +1068,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceBookingHeader.cdm.json/BookableResourceBookingHeader",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceBookingHeader.cdm.json/BookableResourceBookingHeader",
@@ -1027,7 +1083,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceCategory.cdm.json/BookableResourceCategory",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceCategory.cdm.json/BookableResourceCategory",
@@ -1039,7 +1098,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceCategoryAssn.cdm.json/BookableResourceCategoryAssn",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceCategoryAssn.cdm.json/BookableResourceCategoryAssn",
@@ -1051,7 +1113,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceCharacteristic.cdm.json/BookableResourceCharacteristic",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceCharacteristic.cdm.json/BookableResourceCharacteristic",
@@ -1063,7 +1128,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceGroup.cdm.json/BookableResourceGroup",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResourceGroup.cdm.json/BookableResourceGroup",
@@ -1075,7 +1143,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookingStatus.cdm.json/BookingStatus",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookingStatus.cdm.json/BookingStatus",
@@ -1087,7 +1158,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/Characteristic.cdm.json/Characteristic",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/Characteristic.cdm.json/Characteristic",
@@ -1099,7 +1173,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/Company.cdm.json/Company",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/Company.cdm.json/Company",
@@ -1111,7 +1188,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/KnowledgeArticle.cdm.json/KnowledgeArticle",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/KnowledgeArticle.cdm.json/KnowledgeArticle",
@@ -1123,7 +1203,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/RatingModel.cdm.json/RatingModel",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/RatingModel.cdm.json/RatingModel",
@@ -1135,7 +1218,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/RatingValue.cdm.json/RatingValue",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/RatingValue.cdm.json/RatingValue",

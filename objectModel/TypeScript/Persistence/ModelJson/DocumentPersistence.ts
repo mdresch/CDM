@@ -8,16 +8,21 @@ import {
     CdmEntityDefinition,
     CdmManifestDefinition,
     cdmObjectType,
+    cdmLogCode,
     CdmTraitDefinition,
+    constants,
     copyOptions,
-    resolveOptions
+    resolveOptions,
+    StringUtils
 } from '../../internal';
-import { isDocumentDefinition } from '../../Utilities/cdmObjectTypeGuards';
+import { isDocumentDefinition, isEntityDefinition } from '../../Utilities/cdmObjectTypeGuards';
 import { Logger } from '../../Utilities/Logging/Logger';
 import { Import } from '../CdmFolder/types';
 import { LocalEntity } from './types';
 
 export class DocumentPersistence {
+    private static TAG: string = DocumentPersistence.name;
+
     public static async fromData(
         ctx: CdmCorpusContext,
         dataObj: LocalEntity,
@@ -29,7 +34,7 @@ export class DocumentPersistence {
         const doc: CdmDocumentDefinition = ctx.corpus.MakeObject(cdmObjectType.documentDef, docName);
 
         // import at least foundations
-        doc.imports.push('cdm:/foundations.cdm.json');
+        doc.imports.push(constants.FOUNDATIONS_CORPUS_PATH);
 
         const entityDec: CdmEntityDefinition = await ModelJson.EntityPersistence.fromData(
             ctx,
@@ -39,18 +44,13 @@ export class DocumentPersistence {
         );
 
         if (!entityDec) {
-            Logger.error(
-                DocumentPersistence.name,
-                ctx,
-                'There was an error while trying to convert a model.json entity to the CDM entity.'
-            );
-
+            Logger.error(ctx, this.TAG, this.fromData.name, undefined, cdmLogCode.ErrPersistModelJsonEntityConversionError, dataObj.name);
             return undefined;
         }
 
         if (dataObj['cdm:imports']) {
             for (const element of dataObj['cdm:imports']) {
-                if (element.corpusPath === 'cdm:/foundations.cdm.json') {
+                if (element.corpusPath === constants.FOUNDATIONS_CORPUS_PATH) {
                     // don't add foundations twice
                     continue;
                 }
@@ -73,9 +73,11 @@ export class DocumentPersistence {
         if (typeof documentObjectOrPath === 'string') {
             // Fetch the document from entity schema.
             const cdmEntity: CdmEntityDefinition = await ctx.corpus.fetchObjectAsync<CdmEntityDefinition>(documentObjectOrPath, manifest);
-            if (!cdmEntity) {
-                Logger.error(DocumentPersistence.name, ctx, 'There was an error while trying to fetch cdm entity doc.');
-
+            if (!isEntityDefinition(cdmEntity)) {
+                Logger.error(ctx, this.TAG, this.toData.name, manifest.atCorpusPath, cdmLogCode.ErrInvalidCast, documentObjectOrPath, "CdmEntityDefinition");
+                return undefined;
+            } else if (!cdmEntity) {
+                Logger.error(ctx, this.TAG, this.toData.name, manifest.atCorpusPath, cdmLogCode.ErrPersistCdmEntityFetchError);
                 return undefined;
             }
 
@@ -90,7 +92,7 @@ export class DocumentPersistence {
                         // when saving in model.json the documents are flattened to the manifest level
                         // so it is necessary to recalculate the path to be relative to the manifest.
                         let absolutePath: string = ctx.corpus.storage.createAbsoluteCorpusPath(currImport.corpusPath, document);
-                        if (document.namespace && absolutePath.startsWith(`${document.namespace}:`)) {
+                        if (!StringUtils.isBlankByCdmStandard(document.namespace) && absolutePath.startsWith(`${document.namespace}:`)) {
                             absolutePath = absolutePath.substring(document.namespace.length + 1);
                         }
                         currImport.corpusPath = ctx.corpus.storage.createRelativeCorpusPath(absolutePath, manifest);
@@ -98,11 +100,7 @@ export class DocumentPersistence {
                     }
                 }
             } else {
-                Logger.warning(
-                    DocumentPersistence.name,
-                    ctx,
-                    `Entity ${cdmEntity.getName()} is not inside a document or its owner is not a document.`
-                );
+                Logger.warning(ctx, this.TAG, this.toData.name, manifest.atCorpusPath, cdmLogCode.WarnPersistEntityMissing, cdmEntity.getName());
             }
 
             return entity;

@@ -11,11 +11,11 @@ from .cdm_collection_helper_functions import generate_manifest
 class CdmDocumentCollectionTests(unittest.TestCase):
     @async_test
     def test_document_collection_add(self):
-        manifest = generate_manifest('C:\\Root\\Path')
+        manifest = generate_manifest()
         folder = CdmFolderDefinition(manifest.ctx, 'Folder')
         folder._corpus = manifest.ctx.corpus
-        folder.folder_path = 'FolderPath/'
-        folder.namespace = 'Namespace'
+        folder._folder_path = 'FolderPath/'
+        folder._namespace = 'Namespace'
         document = CdmDocumentDefinition(manifest.ctx, 'DocumentName')
 
         self.assertEqual(0, len(folder.documents))
@@ -23,19 +23,22 @@ class CdmDocumentCollectionTests(unittest.TestCase):
         self.assertEqual(1, len(folder.documents))
         self.assertEqual(document, folder.documents[0])
         self.assertEqual(document, added_document)
-        self.assertEqual('FolderPath/', document.folder_path)
+        self.assertEqual('FolderPath/', document._folder_path)
         self.assertEqual(folder, document.owner)
-        self.assertEqual('Namespace', document.namespace)
+        self.assertEqual('Namespace', document._namespace)
         self.assertTrue(document._needs_indexing)
+        
+        doc = folder.documents.append(document)
+        self.assertEqual(None, doc)
 
     @async_test
     def test_document_collection_insert(self):
-        manifest = generate_manifest('C:\\Root\\Path')
+        manifest = generate_manifest()
         folder = CdmFolderDefinition(manifest.ctx, 'Folder')
         folder.in_document = manifest
         folder._corpus = manifest.ctx.corpus
-        folder.folder_path = 'FolderPath/'
-        folder.namespace = 'Namespace'
+        folder._folder_path = 'FolderPath/'
+        folder._namespace = 'Namespace'
         document = CdmDocumentDefinition(manifest.ctx, 'DocumentName')
 
         doc1 = folder.documents.append('doc1')
@@ -50,21 +53,24 @@ class CdmDocumentCollectionTests(unittest.TestCase):
         self.assertEqual(doc2, folder.documents[1])
         self.assertEqual(document, folder.documents[2])
 
-        self.assertEqual('FolderPath/', document.folder_path)
+        self.assertEqual('FolderPath/', document._folder_path)
         self.assertEqual(folder, document.owner)
-        self.assertEqual('Namespace', document.namespace)
+        self.assertEqual('Namespace', document._namespace)
         self.assertTrue(document._needs_indexing)
         self.assertEqual(folder, document.owner)
         self.assertTrue(document.name in folder._document_lookup)
         self.assertTrue(manifest.ctx.corpus._document_library._contains((folder, document)))
 
+        folder.documents.insert(2, document)
+        self.assertEqual(3, len(folder.documents))
+        
     @async_test
     def test_document_collection_add_with_document_name(self):
-        manifest = generate_manifest('C:\\Root\\Path')
+        manifest = generate_manifest()
         folder = CdmFolderDefinition(manifest.ctx, 'Folder')
         folder._corpus = manifest.ctx.corpus
-        folder.folder_path = 'FolderPath/'
-        folder.namespace = 'Namespace'
+        folder._folder_path = 'FolderPath/'
+        folder._namespace = 'Namespace'
 
         self.assertEqual(0, len(folder.documents))
         document = folder.documents.append('DocumentName')
@@ -72,18 +78,18 @@ class CdmDocumentCollectionTests(unittest.TestCase):
 
         self.assertEqual('DocumentName', document.name)
         self.assertEqual(document, folder.documents[0])
-        self.assertEqual('FolderPath/', document.folder_path)
+        self.assertEqual('FolderPath/', document._folder_path)
         self.assertEqual(folder, document.owner)
-        self.assertEqual('Namespace', document.namespace)
+        self.assertEqual('Namespace', document._namespace)
         self.assertTrue(document._needs_indexing)
 
     @async_test
     def test_document_collection_add_range(self):
-        manifest = generate_manifest('C:\\Root\\Path')
+        manifest = generate_manifest()
         folder = CdmFolderDefinition(manifest.ctx, 'Folder')
         folder._corpus = manifest.ctx.corpus
-        folder.folder_path = 'FolderPath/'
-        folder.namespace = 'Namespace'
+        folder._folder_path = 'FolderPath/'
+        folder._namespace = 'Namespace'
 
         self.assertEqual(0, len(folder.documents))
 
@@ -97,24 +103,24 @@ class CdmDocumentCollectionTests(unittest.TestCase):
         self.assertEqual(document2, folder.documents[1])
 
         self.assertEqual('DocumentName', document.name)
-        self.assertEqual('FolderPath/', document.folder_path)
+        self.assertEqual('FolderPath/', document._folder_path)
         self.assertEqual(folder, document.owner)
-        self.assertEqual('Namespace', document.namespace)
+        self.assertEqual('Namespace', document._namespace)
         self.assertTrue(document._needs_indexing)
 
         self.assertEqual('DocumentName2', document2.name)
-        self.assertEqual('FolderPath/', document2.folder_path)
+        self.assertEqual('FolderPath/', document2._folder_path)
         self.assertEqual(folder, document2.owner)
-        self.assertEqual('Namespace', document2.namespace)
+        self.assertEqual('Namespace', document2._namespace)
         self.assertTrue(document2._needs_indexing)
 
     @async_test
     def test_document_collection_remove(self):
-        manifest = generate_manifest('C:\\Root\\Path')
+        manifest = generate_manifest()
         folder = CdmFolderDefinition(manifest.ctx, 'Folder')
         folder._corpus = manifest.ctx.corpus
-        folder.folder_path = 'FolderPath/'
-        folder.namespace = 'Namespace'
+        folder._folder_path = 'FolderPath/'
+        folder._namespace = 'Namespace'
 
         self.assertEqual(0, len(folder.documents))
 
@@ -148,11 +154,11 @@ class CdmDocumentCollectionTests(unittest.TestCase):
 
     @async_test
     def test_document_collection_remove_at(self):
-        manifest = generate_manifest('C:\\Root\\Path')
+        manifest = generate_manifest()
         folder = CdmFolderDefinition(manifest.ctx, 'Folder')
         folder._corpus = manifest.ctx.corpus
-        folder.folder_path = 'FolderPath/'
-        folder.namespace = 'Namespace'
+        folder._folder_path = 'FolderPath/'
+        folder._namespace = 'Namespace'
 
         self.assertEqual(0, len(folder.documents))
 
@@ -186,11 +192,11 @@ class CdmDocumentCollectionTests(unittest.TestCase):
 
     @async_test
     def test_document_collection_clear(self):
-        manifest = generate_manifest('C:\\Root\\Path')
+        manifest = generate_manifest()
         folder = CdmFolderDefinition(manifest.ctx, 'Folder')
         folder._corpus = manifest.ctx.corpus
-        folder.folder_path = 'FolderPath/'
-        folder.namespace = 'Namespace'
+        folder._folder_path = 'FolderPath/'
+        folder._namespace = 'Namespace'
 
         self.assertEqual(0, len(folder.documents))
 

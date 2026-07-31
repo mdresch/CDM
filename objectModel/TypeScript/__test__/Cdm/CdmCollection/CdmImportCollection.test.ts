@@ -9,7 +9,7 @@ import {generateManifest} from './CdmCollectionHelperFunctions';
 
 describe('Cdm/CdmCollection/CdmImportCollection', () => {
     it('TestImportCollectionAdd', () => {
-        const document: CdmDocumentDefinition = generateManifest('C:\\Nothing');
+        const document: CdmDocumentDefinition = generateManifest();
         document.isDirty = false;
         expect(document.isDirty)
             .toEqual(false);
@@ -33,7 +33,7 @@ describe('Cdm/CdmCollection/CdmImportCollection', () => {
     });
 
     it('TestCdmImportCollectionAddCorpusPath', () => {
-        const document: CdmDocumentDefinition = generateManifest('C:\\Nothing');
+        const document: CdmDocumentDefinition = generateManifest();
         document.isDirty = false;
         const imp: CdmImport = document.imports.push('corpusPath');
 
@@ -52,7 +52,7 @@ describe('Cdm/CdmCollection/CdmImportCollection', () => {
     });
 
     it ('TestCdmImportCollectionAddCorpusPathAndMoniker', () => {
-        const document: CdmDocumentDefinition = generateManifest('C:\\Nothing');
+        const document: CdmDocumentDefinition = generateManifest();
         document.isDirty = false;
         const imp: CdmImport = document.imports.push('corpusPath', 'moniker');
 
@@ -71,33 +71,46 @@ describe('Cdm/CdmCollection/CdmImportCollection', () => {
     });
 
     it ('TestCdmImportCollectionAddRange', () => {
-        const document: CdmDocumentDefinition = generateManifest('C:\\Nothing');
+        const document: CdmDocumentDefinition = generateManifest();
         document.isDirty = false;
         const importList: CdmImport[] = [
             new CdmImport(document.ctx, 'corpusPath1', 'moniker1'),
-            new CdmImport(document.ctx, 'corpusPath2', 'moniker2')
+            new CdmImport(document.ctx, 'corpusPath2', 'moniker2'),
+            new CdmImport(document.ctx, 'corpusPath3', undefined)
         ];
         document.imports.concat(importList);
 
         expect(document.isDirty)
             .toBeTruthy();
         expect(document.imports.length)
-            .toEqual(2);
+            .toEqual(3);
         expect(document.imports.allItems[0])
             .toEqual(importList[0]);
         expect(document.imports.allItems[1])
             .toEqual(importList[1]);
-        expect(importList[0].corpusPath)
+        expect(document.imports.allItems[0].corpusPath)
             .toEqual('corpusPath1');
-        expect(importList[0].moniker)
+        expect(document.imports.item('corpusPath1', 'moniker1').moniker)
             .toEqual('moniker1');
-        expect(importList[0].ctx)
+        expect(document.imports.item('corpusPath1', 'moniker1').ctx)
             .toEqual(document.ctx);
-        expect(importList[1].corpusPath)
+        expect(document.imports.allItems[1].corpusPath)
             .toEqual('corpusPath2');
-        expect(importList[1].moniker)
+        expect(document.imports.item('corpusPath2'))
+            .toBeUndefined();
+        expect(document.imports.item('corpusPath2', undefined, false))
+            .not.toBeUndefined();
+        expect(document.imports.item('corpusPath2', undefined, true))
+            .toBeUndefined();
+        expect(document.imports.item('corpusPath2', 'moniker2', true))
+            .not.toBeUndefined();
+        expect(document.imports.item('corpusPath2', 'moniker3', false))
+            .not.toBeUndefined();
+        expect(document.imports.item('corpusPath2', 'moniker2').moniker)
             .toEqual('moniker2');
-        expect(importList[1].ctx)
+        expect(document.imports.item('corpusPath2', 'moniker2').ctx)
             .toEqual(document.ctx);
+        expect(document.imports.item('corpusPath3'))
+            .toEqual(importList[2]);
     });
 });

@@ -1,4 +1,5 @@
 {
+  "documentVersion": "1.4",
   "jsonSchemaSemanticVersion": "1.0.0",
   "imports": [
     {
@@ -47,7 +48,7 @@
           "arguments": [
             {
               "name": "versionNumber",
-              "value": "1.2"
+              "value": "1.4"
             }
           ]
         }
@@ -363,17 +364,20 @@
                               [
                                 "en",
                                 "Work Item",
-                                "844060000"
+                                "844060000",
+                                "0000"
                               ],
                               [
                                 "en",
                                 "Work Item Action",
-                                "844060001"
+                                "844060001",
+                                "0010"
                               ],
                               [
                                 "en",
                                 "Need",
-                                "844060002"
+                                "844060002",
+                                "0020"
                               ]
                             ]
                           }

@@ -3,7 +3,9 @@
 
 import {
     AttributeResolutionDirectiveSet,
+    CdmAttributeContext,
     CdmDocumentDefinition,
+    CdmEntityDefinition,
     CdmObject,
     CdmObjectBase,
     DepthInfo,
@@ -18,6 +20,7 @@ export class resolveOptions {
     public importsLoadStrategy: importsLoadStrategy = importsLoadStrategy.lazyLoad; // defines at which point the Object Model will try to load the imported documents.
     public resolvedAttributeLimit?: number = 4000; // the limit for the number of resolved attributes allowed per entity. if the number is exceeded, the resolution will fail
     public maxOrdinalForArrayExpansion: number = 20; // the maximum value for the end ordinal in an ArrayExpansion operation
+    public maxDepth: number = 2; // the maximum depth that entity attributes will be resolved before giving up
 
     /**
      * @internal
@@ -57,6 +60,22 @@ export class resolveOptions {
     public fromMoniker?: string; // moniker that was found on the ref
 
     /**
+     * @internal
+     */
+    public mapOldCtxToNewCtx?: Map<CdmAttributeContext, CdmAttributeContext>; // moniker that was found on the ref
+
+    /**
+     * @internal
+     */
+    public currentlyResolvingEntities: Set<CdmEntityDefinition>; // moniker that was found on the ref
+
+    /**
+     * Indicates if resolution guidance was used at any point during resolution
+     * @internal
+     */
+    public usedResolutionGuidance: boolean = false;
+
+    /**
      * @deprecated please use importsLoadStrategy instead.
      * when enabled, all the imports will be loaded and the references checked otherwise will be delayed until the symbols are required.
      */
@@ -89,17 +108,11 @@ export class resolveOptions {
     public inCircularReference: boolean;
 
     public constructor(parameter?: CdmDocumentDefinition | CdmObject, directives?: AttributeResolutionDirectiveSet) {
-        if (!parameter) {
-            return;
-        }
-
-        if (parameter instanceof CdmDocumentDefinition) {
-            this.wrtDoc = parameter;
-        } else if (parameter instanceof CdmObjectBase) {
-            if (parameter && parameter.owner) {
-                this.wrtDoc = parameter.owner.inDocument;
-            }
-        }
+        this.symbolRefSet = new SymbolSet();
+        this.depthInfo = new DepthInfo();
+        this.inCircularReference = false;
+        this.currentlyResolvingEntities = new Set();
+        this.wrtDoc = this.fetchDocument(parameter);
 
         // provided or default to 'avoid one to many relationship nesting and to use foreign keys for many to one refs'.
         // this is for back compat with behavior before the corpus has a default directive property
@@ -111,14 +124,6 @@ export class resolveOptions {
             directivesSet.add('referenceOnly');
             this.directives = new AttributeResolutionDirectiveSet(directivesSet);
         }
-        this.symbolRefSet = new SymbolSet();
-
-        this.depthInfo = {
-            maxDepth: undefined,
-            currentDepth: 0,
-            maxDepthExceeded: false
-        };
-        this.inCircularReference = false;
     }
 
     /**
@@ -142,21 +147,42 @@ export class resolveOptions {
         const resOptCopy: resolveOptions = new resolveOptions();
         resOptCopy.wrtDoc = this.wrtDoc;
         if (this.depthInfo) {
-            resOptCopy.depthInfo = {
-                currentDepth: this.depthInfo.currentDepth,
-                maxDepth: this.depthInfo.maxDepth,
-                maxDepthExceeded: this.depthInfo.maxDepthExceeded
-            };
+            resOptCopy.depthInfo = this.depthInfo.copy();
         }
         if (this.directives) {
             resOptCopy.directives = this.directives.copy();
         }
+        resOptCopy.maxDepth = this.maxDepth;
         resOptCopy.inCircularReference = this.inCircularReference;
         resOptCopy.localizeReferencesFor = this.localizeReferencesFor;
         resOptCopy.indexingDoc = this.indexingDoc;
         resOptCopy.shallowValidation = this.shallowValidation;
         resOptCopy.resolvedAttributeLimit = this.resolvedAttributeLimit;
+        resOptCopy.mapOldCtxToNewCtx = this.mapOldCtxToNewCtx; // ok to share this map
+        resOptCopy.importsLoadStrategy = this.importsLoadStrategy;
+        resOptCopy.saveResolutionsOnCopy = this.saveResolutionsOnCopy;
+        resOptCopy.currentlyResolvingEntities = this.currentlyResolvingEntities; // ok to share this map
+        resOptCopy.usedResolutionGuidance = this.usedResolutionGuidance;
 
         return resOptCopy;
+    }
+
+    /**
+     * Fetches the document that contains the owner of the CdmObject.
+     */
+    private fetchDocument(obj: CdmObject): CdmDocumentDefinition {
+        if (!obj) {
+            return undefined;
+        }
+
+        if (obj instanceof CdmDocumentDefinition) {
+            return obj;
+        }
+
+        if (obj.inDocument) {
+            return obj.inDocument;
+        }
+
+        return obj.owner?.inDocument;
     }
 }

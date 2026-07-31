@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from typing import cast, Optional, TYPE_CHECKING
 
 from cdm.enums import CdmObjectType
-from cdm.utilities import ResolveOptions, time_utils, logger, Errors
+from cdm.utilities import ResolveOptions, time_utils, logger
+from cdm.enums import CdmLogCode
+from cdm.utilities.string_utils import StringUtils
 
 from .cdm_entity_declaration_def import CdmEntityDeclarationDefinition
 from .cdm_file_status import CdmFileStatus
@@ -20,13 +22,15 @@ class CdmReferencedEntityDeclarationDefinition(CdmEntityDeclarationDefinition):
     def __init__(self, ctx: 'CdmCorpusContext', name: str) -> None:
         super().__init__(ctx, name)
 
+        self._TAG = CdmReferencedEntityDeclarationDefinition.__name__
         self.last_child_file_modified_time = None  # type: Optional[datetime]
 
         self.last_file_modified_time = None  # type: Optional[datetime]
 
         self.last_file_status_check_time = None  # type: Optional[datetime]
 
-        self._TAG = CdmReferencedEntityDeclarationDefinition.__name__
+        # --- internal ---
+        self._virtual_location = None
 
     @property
     def data_partitions(self) -> Optional['CdmCollection[CdmDataPartitionDefinition]']:
@@ -37,8 +41,21 @@ class CdmReferencedEntityDeclarationDefinition(CdmEntityDeclarationDefinition):
         return None
 
     @property
+    def incremental_partitions(self) -> Optional['CdmCollection[CdmDataPartitionDefinition]']:
+        return None
+
+    @property
+    def incremental_partition_patterns(self) -> Optional['CdmCollection[CdmDataPartitionPatternDefinition]']:
+        return None
+
+    @property
     def object_type(self) -> 'CdmObjectType':
         return CdmObjectType.REFERENCED_ENTITY_DECLARATION_DEF
+
+    @property
+    def _is_virtual(self) -> bool:
+        """Gets and sets this entity's virtual location, it's model.json file's location if entity is from a model.json file"""
+        return not StringUtils.is_null_or_white_space(self._virtual_location)
 
     def _construct_resolved_attributes(self, res_opt: 'ResolveOptions', under: Optional['CdmAttributeContext']) -> 'ResolvedAttributeSetBuilder':
         return None
@@ -54,12 +71,12 @@ class CdmReferencedEntityDeclarationDefinition(CdmEntityDeclarationDefinition):
             copy = CdmReferencedEntityDeclarationDefinition(self.ctx, self.entity_name)
         else:
             copy = host
-            copy.ctx = self.ctx
             copy.entity_name = self.entity_name
 
         copy.entity_path = self.entity_path
         copy.last_file_status_check_time = self.last_file_status_check_time
         copy.last_file_modified_time = self.last_file_modified_time
+        copy._virtual_location = self._virtual_location
         self._copy_def(res_opt, copy)
         return copy
 
@@ -71,7 +88,7 @@ class CdmReferencedEntityDeclarationDefinition(CdmEntityDeclarationDefinition):
             missing_fields.append('entity_path')
 
         if missing_fields:
-            logger.error(self._TAG, self.ctx, Errors.validate_error_string(self.at_corpus_path, missing_fields))
+            logger.error(self.ctx, self._TAG, 'validate', self.at_corpus_path, CdmLogCode.ERR_VALDN_INTEGRITY_CHECK_FAILURE, self.at_corpus_path, ', '.join(map(lambda s: '\'' + s + '\'', missing_fields)))
             return False
         return True
 
@@ -79,6 +96,13 @@ class CdmReferencedEntityDeclarationDefinition(CdmEntityDeclarationDefinition):
         return self.entity_name
 
     def visit(self, path_from: str, pre_children: 'VisitCallback', post_children: 'VisitCallback') -> bool:
+        path = ''
+
+        if pre_children and pre_children(self, path):
+            return False
+
+        if post_children and post_children(self, path):
+            return True
         return False
 
     def is_derived_from(self, base: str, res_opt: Optional['ResolveOptions'] = None) -> bool:
@@ -88,7 +112,8 @@ class CdmReferencedEntityDeclarationDefinition(CdmEntityDeclarationDefinition):
         """Check the modified time for this object and any children."""
         full_path = self.ctx.corpus.storage.create_absolute_corpus_path(self.entity_path, self.in_document)
 
-        modified_time = await cast('CdmCorpusDefinition', self.ctx.corpus)._compute_last_modified_time_async(full_path, self)
+        modified_time = await cast('CdmCorpusDefinition', self.ctx.corpus)._get_last_modified_time_from_object_async(self) if self._is_virtual \
+            else await cast('CdmCorpusDefinition', self.ctx.corpus)._compute_last_modified_time_async(full_path, self)
 
         self.last_file_status_check_time = datetime.now(timezone.utc)
         self.last_file_modified_time = time_utils._max_time(modified_time, self.last_file_modified_time)

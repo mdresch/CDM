@@ -1,24 +1,24 @@
 {
     "$id": "http://microsoft.com/cdm/schema.cdm.json",
     "$schema": "http://json-schema.org/draft-06/schema#",
-    "$version": "1.0.0",
+    "$version": "1.5.0",
     "type": "object",
     "definitions": {
         "import": {
             "type": "object",
-            "description": "used to bring referenced entity definitions into scope of this document",
+            "description": "Used to bring referenced entity definitions into scope of this document.",
             "properties": {
                 "corpusPath": {
                     "type": "string",
-                    "description": "The relative or absolute (from the root of the corpus folder hierarchy) location of a document file and object"
+                    "description": "The relative or absolute (from the root of the corpus folder hierarchy) location of a document file and object."
                 },
                 "uri": {
                     "type": "string",
-                    "description": "deprecated, replaced by corpusPath"
+                    "description": "Deprecated, replaced by corpusPath."
                 },
                 "moniker": {
                     "type": "string",
-                    "description": "A prefix that can be added to disambiguate different imported objects that may share a name. References to object defined in this imported document (or in the documents it further imports) must start with the moniker name such as myMoniker/MyEntity"
+                    "description": "A prefix that can be added to disambiguate different imported objects that may share a name. References to object defined in this imported document (or in the documents it further imports) must start with the moniker name such as myMoniker/MyEntity."
                 }
             },
             "additionalProperties": false,
@@ -35,6 +35,16 @@
                 }
             ]
         },
+        "traitOrTraitGroupClassReference": {
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/traitClassReference"
+                },
+                {
+                    "$ref": "#/definitions/traitGroupClassReference"
+                }
+            ]
+        },
         "constant": {
             "oneOf": [
                 {
@@ -44,7 +54,7 @@
                     "$ref": "#/definitions/purposeClassReference"
                 },
                 {
-                    "$ref": "#/definitions/traitClassReference"
+                    "$ref": "#/definitions/traitOrTraitGroupClassReference"
                 },
                 {
                     "$ref": "#/definitions/dataTypeClassReference"
@@ -93,6 +103,16 @@
                 }
             ]
         },
+        "traitGroupReference": {
+            "oneOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "$ref": "#/definitions/traitGroup"
+                }
+            ]
+        },
         "traitClassReference": {
             "type": "object",
             "description": "",
@@ -112,11 +132,53 @@
                             }
                         ]
                     }
+                },
+                "optional": {
+                    "type": "boolean"
+                },
+                "appliedTraits": {
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    }
+                },
+                "verb": {
+                    "oneOf": [
+                        {
+                            "$ref": "#/definitions/traitClassReference"
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ]
                 }
             },
             "additionalProperties": false,
             "required": [
                 "traitReference"
+            ]
+        },
+        "traitGroupClassReference": {
+            "type": "object",
+            "description": "A reference to a Trait Group definition",
+            "properties": {
+                "traitGroupReference": {
+                    "$ref": "#/definitions/traitGroupReference"
+                },
+                "optional": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "traitGroupReference"
             ]
         },
         "purposeReference": {
@@ -141,13 +203,16 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
                             }
                         ]
                     }
+                },
+                "optional": {
+                    "type": "boolean"
                 }
             },
             "additionalProperties": false,
@@ -177,13 +242,16 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
                             }
                         ]
                     }
+                },
+                "optional": {
+                    "type": "boolean"
                 }
             },
             "additionalProperties": false,
@@ -207,6 +275,22 @@
             "properties": {
                 "attributeGroupReference": {
                     "$ref": "#/definitions/attributeGroupReference"
+                },                
+                "appliedTraits": {
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    }
+                },
+                "optional": {
+                    "type": "boolean"
                 }
             },
             "additionalProperties": false,
@@ -239,13 +323,16 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
                             }
                         ]
                     }
+                },
+                "optional": {
+                    "type": "boolean"
                 }
             },
             "additionalProperties": false,
@@ -279,7 +366,7 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
@@ -319,7 +406,7 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
@@ -339,19 +426,19 @@
             "properties": {
                 "removeAttribute": {
                     "type": "boolean",
-                    "description": "If true, this attribute definiton will be removed from the final resolved attribute list of an entity.",
+                    "description": "If true, this attribute definition will be removed from the final resolved attribute list of an entity.",
                     "default": false
                 },
                 "imposedDirectives": {
                     "type": "array",
-                    "description": "A list of strings, one for each 'directive' that should be always imposed at this attribute definition",
+                    "description": "A list of strings, one for each 'directive' that should be always imposed at this attribute definition.",
                     "items": {
                         "type": "string"
                     }
                 },
                 "removedDirectives": {
                     "type": "array",
-                    "description": "A list of strings, one for each 'directive' that should be removed if previously imposed",
+                    "description": "A list of strings, one for each 'directive' that should be removed if previously imposed.",
                     "items": {
                         "type": "string"
                     }
@@ -380,7 +467,7 @@
                 },
                 "renameFormat": {
                     "type": "string",
-                    "description": "format specifier for generated attribute names. May contain a single occurence of ('{a} or 'A'), ('{m}' or '{M}') and '{o}' for the base (a/A)ttribute name, any (m/M)ember attributes from entities and array (o)rdinal. examples: '{a}{o}.{m}' could produce 'address2.city', '{a}{o}' gives 'city1'. Using '{A}' or '{M}' will uppercase the first letter of the name portions.",
+                    "description": "Format specifier for generated attribute names. May contain a single occurrence of ('{a} or 'A'), ('{m}' or '{M}') and '{o}' for the base (a/A)ttribute name, any (m/M)ember attributes from entities and array (o)rdinal. examples: '{a}{o}.{m}' could produce 'address2.city', '{a}{o}' gives 'city1'. Using '{A}' or '{M}' will uppercase the first letter of the name portions.",
                     "default": "{a}{o}{M}"
                 },
                 "expansion": {
@@ -392,7 +479,7 @@
                             "default": 0
                         },
                         "maximumExpansion": {
-                            "explanation": "the greatest number of time that the attribute pattern should be repeated.",
+                            "explanation": "The greatest number of time that the attribute pattern should be repeated.",
                             "type": "integer",
                             "default": 5
                         },
@@ -409,7 +496,6 @@
                                     "$ref": "#/definitions/typeAttribute"
                                 }
                             ]
-        
                         }
                     },
                     "additionalProperties": false,
@@ -418,21 +504,21 @@
                 "entityByReference": {
                     "allowReference": true,
                     "type": "object",
-                    "description": "Parameters that control the use of foreign keys to reference entity instances instead of imbedding the entity in a nested way",
+                    "description": "Parameters that control the use of foreign keys to reference entity instances instead of imbedding the entity in a nested way.",
                     "properties": {
                         "allowReference": {
                             "type": "boolean",
                             "default": true,
-                            "description": "if true, a foreign key attribute may be used in replace of the entity when needed or requested."
+                            "description": "If true, a foreign key attribute may be used in replace of the entity when needed or requested."
                         },
                         "alwaysIncludeForeignKey": {
                             "type": "boolean",
                             "default": false,
-                            "description": "if true, a foreign key attribute will be added to the entity even when the entity attribute is imbedded in a nested way."
+                            "description": "If true, a foreign key attribute will be added to the entity even when the entity attribute is imbedded in a nested way."
                         },
                         "referenceOnlyAfterDepth": {
                             "type": "integer",
-                            "description": "After a given depth of non-reference nesting using entity attributes, the 'referenceOnly' directive will be imposed",
+                            "description": "After a given depth of non-reference nesting using entity attributes, the 'referenceOnly' directive will be imposed.",
                             "default": 2
                         },
                         "foreignKeyAttribute": {
@@ -455,7 +541,7 @@
                 },
                 "selectsSubAttribute": {
                     "type": "object",
-                    "description": "used to select either 'one' or 'all' of the attributes from an entity when it is being used as an attribute of another entity. If the 'structured' directive is set, this trait causes resolved attributes to end up in groups rather than a flattend list",
+                    "description": "Used to select either 'one' or 'all' of the attributes from an entity when it is being used as an attribute of another entity. If the 'structured' directive is set, this trait causes resolved attributes to end up in groups rather than a flattened list.",
                     "properties": {
                         "selects": {
                             "enum": [
@@ -501,6 +587,23 @@
             "additionalProperties": false,
             "required": []
         },
+        "cardinalitySettings": {
+            "type": "object",
+            "description": "If '0' then the attribute is nullable, if '1' it is not nullable and '*' is multiple instances and will be used by the operationArrayExpansion.",
+            "properties": {
+                "minimum": {
+                    "type": "string"
+                },
+                "maximum": {
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "minimum",
+                "maximum"
+            ]
+        },
         "typeAttribute": {
             "type": "object",
             "description": "",
@@ -519,6 +622,10 @@
                         }
                     ]
                 },
+                "projection": {
+                    "type": "object",
+                    "$ref": "#/definitions/projection"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -532,12 +639,16 @@
                         }
                     ]
                 },
+                "cardinality": {
+                    "type": "object",
+                    "$ref": "#/definitions/cardinalitySettings"
+                },
                 "appliedTraits": {
                     "type": "array",
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
@@ -631,18 +742,27 @@
                         }
                     ]
                 },
+                "cardinality": {
+                    "type": "object",
+                    "$ref": "#/definitions/cardinalitySettings"
+                },
                 "displayName": {
                     "type": "string"
                 },
                 "description": {
                     "type": "string"
                 },
+                "isPolymorphicSource": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "If set to true, indicates to a projection that the source is a polymorphic source."
+                },
                 "resolutionGuidance": {
                     "type": "object",
                     "$ref": "#/definitions/resolutionGuidance"
                 },
                 "entity": {
-                    "description": "the id of an entity, a structured entity reference or an array of either of those two",
+                    "description": "The id of an entity, a structured entity reference or an array of either of those two.",
                     "oneOf": [
                         {
                             "$ref": "#/definitions/entityClassReference"
@@ -651,17 +771,7 @@
                             "type": "string"
                         },
                         {
-                            "type": "array",
-                            "items": {
-                                "oneOf": [
-                                    {
-                                        "$ref": "#/definitions/entityClassReference"
-                                    },
-                                    {
-                                        "type": "string"
-                                    }
-                                ]
-                            }
+                            "$ref": "#/definitions/projection"
                         }
                     ]
                 },
@@ -670,7 +780,7 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
@@ -720,7 +830,7 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
@@ -814,21 +924,45 @@
                 },
                 "elevated": {
                     "type": "boolean",
-                    "description": "elevated traits that are applied to attributes will be inherited by the containing entity."
+                    "description": "Elevated traits that are applied to attributes will be inherited by the containing entity."
                 },
                 "modifiesAttributes": {
                     "type": "boolean",
-                    "description": "if true, the trait might add, change or remove attributes from an entity."
+                    "description": "If true, the trait might add, change or remove attributes from an entity."
                 },
                 "ugly": {
                     "type": "boolean",
-                    "description": "ugly traits are usually internal or structural and shouldn't be shown in UI."
+                    "description": "Ugly traits are usually internal or structural and shouldn't be shown in UI."
                 },
                 "associatedProperties": {
                     "type": "array",
-                    "description": "the list of Entity or Attribute properties that this trait informs and reflects.",
+                    "description": "The list of Entity or Attribute properties that this trait informs and reflects.",
                     "items": {
                         "type": "string"
+                    }
+                },
+                "defaultVerb": {
+                    "oneOf": [
+                        {
+                            "$ref": "#/definitions/traitClassReference"
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ]
+                },
+
+                "exhibitsTraits": {
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
                     }
                 }
             },
@@ -837,9 +971,39 @@
                 "traitName"
             ]
         },
+        "traitGroup": {
+            "type": "object",
+            "description": "A Trait group represents a collection (grouping) of one or more traits.",
+            "properties": {
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the 'trait group' within the context of this entity definition system."
+                },
+                "traitGroupName": {
+                    "type": "string"
+                },
+                "exhibitsTraits": {
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    }
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "traitGroupName"
+            ]
+        },
         "attributeContext": {
             "type": "object",
-            "description": "A container representing shared lineage, ownership and context in a hierachy describing the relatioships among an entities attributes.",
+            "description": "A container representing shared lineage, ownership and context in a hierarchy describing the relationships among an entities attributes.",
             "properties": {
                 "explanation": {
                     "type": "string",
@@ -848,9 +1012,36 @@
                 "type": {
                     "enum": [
                         "entity",
+                        "entityAsAttribute",
+                        "entityReferenceExtends",
                         "extendedEntity",
+                        "attributeDefinition",
+                        "attributeExcluded",
                         "attributeGroup",
-                        "entityAsAttribute"
+                        "generatedSet",
+                        "generatedRound",
+                        "addedAttributeNewArtifact",
+                        "addedAttributeSupporting",
+                        "addedAttributeIdentity",
+                        "addedAttributeSelectedType",
+                        "addedAttributeExpansionTotal",
+                        "passThrough",
+                        "projection",
+                        "source",
+                        "operations",
+                        "operationAddCountAttribute",
+                        "operationAddSupportingAttribute",
+                        "operationAddTypeAttribute",
+                        "operationExcludeAttributes",
+                        "operationArrayExpansion",
+                        "operationCombineAttributes",
+                        "operationRenameAttributes",
+                        "operationReplaceAsForeignKey",
+                        "operationIncludeAttributes",
+                        "operationAddAttributeGroup",
+                        "operationAlterTraits",
+                        "operationAddArtifactAttribute",
+                        "unknown"
                     ]
                 },
                 "name": {
@@ -867,7 +1058,7 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
@@ -886,6 +1077,12 @@
                                 "type": "string"
                             }
                         ]
+                    }
+                },
+                "lineage": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
                 }
             },
@@ -913,10 +1110,13 @@
                         },
                         {
                             "type": "string"
+                        },
+                        {
+                            "$ref": "#/definitions/projection"
                         }
                     ]
                 },
-                "extendsEntityResolutionGuidance" : {
+                "extendsEntityResolutionGuidance": {
                     "type": "object",
                     "$ref": "#/definitions/resolutionGuidance"
                 },
@@ -925,7 +1125,7 @@
                     "items": {
                         "oneOf": [
                             {
-                                "$ref": "#/definitions/traitClassReference"
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
                             },
                             {
                                 "type": "string"
@@ -981,7 +1181,7 @@
         },
         "constantEntity": {
             "type": "object",
-            "description": "Used to structure and describe a set of related constant values that may be used as trait arguments",
+            "description": "Used to structure and describe a set of related constant values that may be used as trait arguments.",
             "properties": {
                 "explanation": {
                     "type": "string",
@@ -1015,6 +1215,609 @@
                 "entityShape",
                 "constantValues"
             ]
+        },
+        "operationAddAttributeGroup": {
+            "type": "object",
+            "description": "An operation to create attribute groups.",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help add an attribute group in a projection."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "attributeGroupName": {
+                    "type": "string",
+                    "description": "The name used to create the attribute group."
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "attributeGroupName"
+            ]
+        },
+        "operationAddCountAttribute": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help add a count attribute specifically targeted for array expansions."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "countAttribute": {
+                    "$ref": "#/definitions/typeAttribute"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "countAttribute"
+            ]
+        },
+        "operationAddSupportingAttribute": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help add a supporting attribute to another attribute."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "supportingAttribute": {
+                    "$ref": "#/definitions/typeAttribute"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "supportingAttribute"
+            ]
+        },
+        "operationAddTypeAttribute": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help add a type attribute specifically targeted for polymorphic combination of attributes."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "typeAttribute": {
+                    "$ref": "#/definitions/typeAttribute"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "typeAttribute"
+            ]
+        },
+        "operationExcludeAttributes": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help exclude some attributes in the selection process."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "excludeAttributes": {
+                    "type": "array",
+                    "description": "A list of attributes to avoid.",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "excludeAttributes"
+            ]
+        },
+        "operationArrayExpansion": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help expand an array of attributes."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "startOrdinal": {
+                    "type": "integer",
+                    "description": "Smaller ordinal.",
+                    "default": 1
+                },
+                "endOrdinal": {
+                    "type": "integer",
+                    "description": "Larger ordinal.",
+                    "default": 3
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "startOrdinal",
+                "endOrdinal"
+            ]
+        },
+        "operationCombineAttributes": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to combine multiple attributes into one."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "select": {
+                    "type": "array",
+                    "description": "A list of attribute names to be replaced with the mergeInto attribute.",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mergeInto": {
+                    "$ref": "#/definitions/typeAttribute"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "select",
+                "mergeInto"
+            ]
+        },
+        "operationRenameAttributes": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help rename an attribute."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "renameFormat": {
+                    "type": "string",
+                    "description": "Format specifier for generated attribute names. May contain a single occurrence of ('{a} or 'A'), ('{m}' or '{M}'), ('{mo}' or '{Mo}'), and '{o}' for the (a/A)ttribute name of the projection owner, the resolved name of any (m/M)ember attribute from entities, the original name of any member attribute from entities, and array (o)rdinal. examples: '{a}{o}.{m}' could produce 'address2.city', '{a}{o}' gives 'city1'. Using '{A}', '{Mo}' or '{M}' will uppercase the first letter of the name portions.",
+                    "default": "{a}{o}{M}"
+                },
+                "applyTo": {
+                    "description": "A list of attributes from the input attributes set that will renamed following the patterns specified on RenameFormat.If not specified, renames all the attributes.",
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "description": "A single attribute to apply the rename on. This is an optional."
+                        },
+                        {
+                            "type": "array",
+                            "description": "The attribute set to apply the rename on. This is an optional.",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "renameFormat"
+            ]
+        },
+        "operationReplaceAsForeignKey": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help create a foreign key based on the referenced key."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "reference": {
+                    "type": "string",
+                    "description": "An attribute name from the referenced entity."
+                },
+                "replaceWith": {
+                    "$ref": "#/definitions/typeAttribute"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "reference",
+                "replaceWith"
+            ]
+        },
+        "operationIncludeAttributes": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help select a set of attributes from the source."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "includeAttributes": {
+                    "type": "array",
+                    "description": "A list of attributes to take.",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "includeAttributes"
+            ]
+        },
+         "operationAlterTraits": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help alter traits in attributes from the source."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "traitsToAdd": {
+                    "description": "A list of traits or trait groups that will be applied on the input",
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    }
+                },
+                "traitsToRemove": {
+                    "description": "A list of traits or trait groups that will be removed (if found) on the input.",
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {
+                                "$ref": "#/definitions/traitOrTraitGroupClassReference"
+                            },
+                            {
+                                "type": "string"
+                            }
+                        ]
+                    }
+                },
+                "argumentsContainWildcards": {
+                    "type": "boolean",
+                    "description": "If true, checks all arguments from all traits and performs replacement. May contain a single occurrence of ('{a} or 'A'), ('{m}' or '{M}'), ('{mo}' or '{Mo}'), and '{o}' for the (a/A)ttribute name of the projection owner, the resolved name of any (m/M)ember attribute from entities, the original name of any member attribute from entities, and array (o)rdinal. examples: '{a}{o}.{m}' could produce 'address2.city', '{a}{o}' gives 'city1'. Using '{A}', '{Mo}' or '{M}' will uppercase the first letter of the name portions."
+                },
+                "applyTo": {
+                    "description": "A list of attributes from the input attributes set to which traits defined in traitsToAdd property will be added (or arguments updated) and/or removed as indicated in traitsToRemove property. If not specified, traits in all attributes from the source will be targeted.",
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "description": "A single attribute to apply the trait changes on. This is an optional."
+                        },
+                        {
+                            "type": "array",
+                            "description": "The attribute set to apply the trait changes on. This is an optional.",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ]
+                },
+                "applyToTraits": {
+                    "description": "A list of trait names to find on the input attribute set to which traits defined in traitsToAdd property will be added (or arguments updated) and/or removed as indicated in traitsToRemove property. If specified, traits are modified on these traits and NOT modified on the source attributes. names can be trait names, extended names or 'classifiedAs' names",
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "description": "A single trait to apply the trait changes on. This is an optional."
+                        },
+                        {
+                            "type": "array",
+                            "description": "The trait set to apply the trait changes on. This is an optional.",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    ]
+                }
+
+            },
+            "additionalProperties": false,
+            "oneOf": [
+                {
+                    "required": [
+                        "$type",
+                        "traitsToAdd"
+                    ]
+                },
+                {
+                    "required": [
+                        "$type",
+                        "traitsToRemove"
+                    ]
+                }
+            ]
+        },
+        "operationAddArtifactAttribute": {
+            "type": "object",
+            "description": "",
+            "properties": {
+                "$type": {
+                    "type": "string",
+                    "description": "An operation to help add an artifact attribute to the input attribute list."
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "A string condition expression where projection should evaluate."
+                },
+                "explanation": {
+                    "type": "string",
+                    "description": "Used to document the usage or meaning of the operation."
+                },
+                "sourceInput": {
+                    "type": "boolean",
+                    "description": "Property of an operation that defines if the operation receives the input from previous operation or from source entity."
+                },
+                "newAttribute": {
+                    "description": "The new attribute that will be added to the input attributes list.",
+                    "oneOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "$ref": "#/definitions/typeAttribute"
+                        }
+                    ]
+                },
+                "insertAtTop": {
+                    "type": "boolean",
+                    "description": "If true, the new attribute will be added at the top of the input attribute list. Otherwise, it is added at the bottom of the input attribute list."
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "$type",
+                "newAttribute"
+            ]
+        },
+        "projection": {
+            "type": "object",
+            "description": "Blocks of operation that get evaluated based on a source and conditions.",
+            "properties": {
+                "condition": {
+                    "description": "A string condition expression where projection should evaluate.",
+                    "type": "string"
+                },
+                "operations": {
+                    "oneOf": [
+                        {
+                            "$ref": "#/definitions/operationAddAttributeGroup"
+                        },
+                        {
+                            "$ref": "#/definitions/operationIncludeAttributes"
+                        },
+                        {
+                            "$ref": "#/definitions/operationExcludeAttributes"
+                        },
+                        {
+                            "$ref": "#/definitions/operationRenameAttributes"
+                        },
+                        {
+                            "$ref": "#/definitions/operationArrayExpansion"
+                        },
+                        {
+                            "$ref": "#/definitions/operationAddCountAttribute"
+                        },
+                        {
+                            "$ref": "#/definitions/operationReplaceAsForeignKey"
+                        },
+                        {
+                            "$ref": "#/definitions/operationAddSupportingAttribute"
+                        },
+                        {
+                            "$ref": "#/definitions/operationCombineAttributes"
+                        },
+                        {
+                            "$ref": "#/definitions/operationAddTypeAttribute"
+                        },
+                        {
+                            "$ref": "#/definitions/operationAddArtifactAttribute"
+                        },
+                        {
+                            "$ref": "#/definitions/operationAlterTraits"
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "oneOf": [
+                                    {
+                                        "$ref": "#/definitions/operationAddAttributeGroup"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationIncludeAttributes"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationExcludeAttributes"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationRenameAttributes"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationArrayExpansion"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationAddCountAttribute"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationReplaceAsForeignKey"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationAddSupportingAttribute"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationCombineAttributes"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationAddTypeAttribute"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationAddArtifactAttribute"
+                                    },
+                                    {
+                                        "$ref": "#/definitions/operationAlterTraits"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "runSequentially": {
+                    "type": "boolean",
+                    "description": "If true, runs the operations sequentially so each operation receives the result of the previous one."
+                },
+                "source": {
+                    "oneOf": [
+                        {
+                            "$ref": "#/definitions/entityClassReference"
+                        },
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "$ref": "#/definitions/projection"
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false
         }
     },
     "properties": {
@@ -1026,9 +1829,16 @@
         },
         "jsonSchemaSemanticVersion": {
             "type": "string",
-            "description": "the semantic version (major.minor.patch) number of the $schema document dictating the shape of the json document describing the entity shapes",
+            "description": "The semantic version (major.minor.patch) number of the $schema document dictating the shape of the json document describing the entity shapes.",
             "examples": [
                 "0.3.0"
+            ]
+        },
+        "documentVersion": {
+            "type": "string",
+            "description": "The version of the document. Should be the same as the version of the file or the latest version if the file is not versioned.",
+            "examples": [
+                "0.0.1"
             ]
         },
         "imports": {
@@ -1046,6 +1856,9 @@
                     },
                     {
                         "$ref": "#/definitions/trait"
+                    },
+                    {
+                        "$ref": "#/definitions/traitGroup"
                     },
                     {
                         "$ref": "#/definitions/dataType"

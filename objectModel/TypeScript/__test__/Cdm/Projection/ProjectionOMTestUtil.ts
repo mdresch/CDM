@@ -186,7 +186,7 @@ export class ProjectionOMTestUtil {
     }
 
     public Dispose(): void {
-        this.corpus = null;
+        this.corpus = undefined;
     }
 
     /**
@@ -259,7 +259,7 @@ export class ProjectionOMTestUtil {
      * Create an inline entity reference for a projection
      */
     public createProjectionInlineEntityReference(projection: CdmProjection): CdmEntityReference {
-        const projectionInlineEntityRef: CdmEntityReference = this.corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, null);
+        const projectionInlineEntityRef: CdmEntityReference = this.corpus.MakeObject<CdmEntityReference>(cdmObjectType.entityRef, undefined);
         projectionInlineEntityRef.explicitReference = projection;
 
         return projectionInlineEntityRef;
@@ -271,13 +271,7 @@ export class ProjectionOMTestUtil {
     public createOperationInputAttribute(projection: CdmProjection, includeAttributes: string[]): CdmOperationIncludeAttributes {
         // IncludeAttributes Operation
         const includeAttributesOp: CdmOperationIncludeAttributes = new CdmOperationIncludeAttributes(this.corpus.ctx)
-        {
-            includeAttributes = []
-        };
-
-        for (const includeAttribute of includeAttributes) {
-            includeAttributesOp.includeAttributes.push(includeAttribute);
-        }
+        includeAttributesOp.includeAttributes = includeAttributes?.slice()
 
         projection.operations.push(includeAttributesOp);
 

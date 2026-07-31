@@ -1,7 +1,12 @@
 {
+  "documentVersion": "1.4",
   "$schema": "CdmManifest.cdm.json",
   "jsonSchemaSemanticVersion": "1.0.0",
-  "imports": [],
+  "imports": [
+    {
+      "corpusPath": "/core/cdsConcepts.cdm.json"
+    }
+  ],
   "manifestName": "Supporting Entities",
   "entities": [
     {
@@ -206,7 +211,10 @@
       "fromEntity": "/core/applicationCommon/Address.cdm.json/Address",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/Address.cdm.json/Address",
@@ -548,7 +556,10 @@
       "fromEntity": "/core/applicationCommon/CustomerRelationship.cdm.json/CustomerRelationship",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/CustomerRelationship.cdm.json/CustomerRelationship",
@@ -572,7 +583,10 @@
       "fromEntity": "/core/applicationCommon/Feedback.cdm.json/Feedback",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/SLA.cdm.json/SLA",
@@ -584,7 +598,10 @@
       "fromEntity": "/core/applicationCommon/SLA.cdm.json/SLA",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
@@ -752,7 +769,10 @@
       "fromEntity": "/core/applicationCommon/SocialProfile.cdm.json/SocialProfile",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/SocialProfile.cdm.json/SocialProfile",
@@ -776,7 +796,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResource.cdm.json/BookableResource",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/BookableResource.cdm.json/BookableResource",
@@ -788,7 +811,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
@@ -800,7 +826,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
@@ -812,7 +841,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Email.cdm.json/Email",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Email.cdm.json/Email",
@@ -824,7 +856,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Lead.cdm.json/Lead",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Lead.cdm.json/Lead",
@@ -836,7 +871,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Letter.cdm.json/Letter",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Letter.cdm.json/Letter",
@@ -848,7 +886,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/SocialActivity.cdm.json/SocialActivity",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/SocialActivity.cdm.json/SocialActivity",
@@ -860,7 +901,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Invoice.cdm.json/Invoice",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Invoice.cdm.json/Invoice",
@@ -872,7 +916,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Opportunity.cdm.json/Opportunity",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Opportunity.cdm.json/Opportunity",
@@ -884,7 +931,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/OpportunityClose.cdm.json/OpportunityClose",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/OpportunityClose.cdm.json/OpportunityClose",
@@ -896,7 +946,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/OpportunityRelationship.cdm.json/OpportunityRelationship",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/OpportunityRelationship.cdm.json/OpportunityRelationship",
@@ -908,7 +961,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Order.cdm.json/Order",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Order.cdm.json/Order",
@@ -920,7 +976,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/QuoteClose.cdm.json/QuoteClose",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/QuoteClose.cdm.json/QuoteClose",
@@ -932,7 +991,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",
@@ -944,7 +1006,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Contract.cdm.json/Contract",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Contract.cdm.json/Contract",
@@ -956,7 +1021,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/ContractLine.cdm.json/ContractLine",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/ContractLine.cdm.json/ContractLine",
@@ -968,7 +1036,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Entitlement.cdm.json/Entitlement",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Entitlement.cdm.json/Entitlement",
@@ -980,7 +1051,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Task.cdm.json/Task",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Task.cdm.json/Task",
@@ -1058,7 +1132,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
@@ -1148,7 +1225,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
       "fromEntityAttribute": "parentCustomerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Email.cdm.json/Email",
@@ -1172,7 +1252,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Lead.cdm.json/Lead",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Letter.cdm.json/Letter",
@@ -1190,25 +1273,37 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/SocialActivity.cdm.json/SocialActivity",
       "fromEntityAttribute": "postAuthorAccount",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/SocialActivity.cdm.json/SocialActivity",
       "fromEntityAttribute": "postAuthor",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Invoice.cdm.json/Invoice",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Opportunity.cdm.json/Opportunity",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Opportunity.cdm.json/Opportunity",
@@ -1226,13 +1321,19 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/OpportunityRelationship.cdm.json/OpportunityRelationship",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Order.cdm.json/Order",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/QuoteClose.cdm.json/QuoteClose",
@@ -1244,31 +1345,46 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Contract.cdm.json/Contract",
       "fromEntityAttribute": "billingCustomerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Contract.cdm.json/Contract",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/ContractLine.cdm.json/ContractLine",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Entitlement.cdm.json/Entitlement",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Account.cdm.json/Account",
-      "toEntityAttribute": "accountId"
+      "toEntityAttribute": "accountId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Entitlement.cdm.json/Entitlement",
@@ -1316,7 +1432,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
@@ -1340,7 +1459,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
       "fromEntityAttribute": "parentCustomerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
@@ -1436,7 +1558,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Lead.cdm.json/Lead",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Letter.cdm.json/Letter",
@@ -1454,13 +1579,19 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/SocialActivity.cdm.json/SocialActivity",
       "fromEntityAttribute": "postAuthorAccount",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/SocialActivity.cdm.json/SocialActivity",
       "fromEntityAttribute": "postAuthor",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/ContactInvoices.cdm.json/ContactInvoices",
@@ -1484,13 +1615,19 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Invoice.cdm.json/Invoice",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Opportunity.cdm.json/Opportunity",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Opportunity.cdm.json/Opportunity",
@@ -1502,19 +1639,28 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/OpportunityRelationship.cdm.json/OpportunityRelationship",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Order.cdm.json/Order",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",
@@ -1532,25 +1678,37 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Contract.cdm.json/Contract",
       "fromEntityAttribute": "billingCustomerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Contract.cdm.json/Contract",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/ContractLine.cdm.json/ContractLine",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Entitlement.cdm.json/Entitlement",
       "fromEntityAttribute": "customerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/Contact.cdm.json/Contact",
-      "toEntityAttribute": "contactId"
+      "toEntityAttribute": "contactId",
+      "exhibitsTraits": [
+        "is.CDS.customer"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Entitlement.cdm.json/Entitlement",
@@ -1610,7 +1768,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Email.cdm.json/Email",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Email.cdm.json/Email",
@@ -1676,7 +1837,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Lead.cdm.json/Lead",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Lead.cdm.json/Lead",
@@ -1748,7 +1912,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Letter.cdm.json/Letter",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/Letter.cdm.json/Letter",
@@ -1802,7 +1969,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Invoice.cdm.json/Invoice",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Invoice.cdm.json/Invoice",
@@ -1850,7 +2020,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Opportunity.cdm.json/Opportunity",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Opportunity.cdm.json/Opportunity",
@@ -1928,7 +2101,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/OpportunityRelationship.cdm.json/OpportunityRelationship",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/OpportunityRelationship.cdm.json/OpportunityRelationship",
@@ -1964,7 +2140,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Order.cdm.json/Order",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/sales/Order.cdm.json/Order",
@@ -2018,7 +2197,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Case.cdm.json/Case",
@@ -2090,7 +2272,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Contract.cdm.json/Contract",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Contract.cdm.json/Contract",
@@ -2144,7 +2329,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/ContractLine.cdm.json/ContractLine",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/ContractLine.cdm.json/ContractLine",
@@ -2180,7 +2368,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Entitlement.cdm.json/Entitlement",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Entitlement.cdm.json/Entitlement",
@@ -2288,7 +2479,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Task.cdm.json/Task",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/Task.cdm.json/Task",
@@ -2774,7 +2968,10 @@
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/SocialActivity.cdm.json/SocialActivity",
       "fromEntityAttribute": "ownerId",
       "toEntity": "/core/applicationCommon/foundationCommon/crmCommon/service/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "/core/applicationCommon/foundationCommon/crmCommon/SocialActivity.cdm.json/SocialActivity",

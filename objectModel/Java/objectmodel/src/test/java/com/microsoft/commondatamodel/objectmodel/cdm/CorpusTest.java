@@ -4,10 +4,13 @@
 package com.microsoft.commondatamodel.objectmodel.cdm;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.microsoft.commondatamodel.objectmodel.TestHelper;
+import com.microsoft.commondatamodel.objectmodel.enums.CdmLogCode;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmStatusLevel;
 import com.microsoft.commondatamodel.objectmodel.enums.ImportsLoadStrategy;
 import com.microsoft.commondatamodel.objectmodel.utilities.AttributeResolutionDirectiveSet;
@@ -17,7 +20,7 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class CorpusTest {
-    private static final String TESTS_SUBPATH = new File("cdm", "corpus").toString();
+    private static final String TESTS_SUBPATH = new File("Cdm", "Corpus").toString();
 
     /**
     * Tests if a symbol imported with a moniker can be found as the last resource.
@@ -25,7 +28,7 @@ public class CorpusTest {
     */
     @Test
     public void testResolveSymbolReference() throws InterruptedException, ExecutionException {
-        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testResolveSymbolReference", null);
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testResolveSymbolReference");
 
         corpus.setEventCallback((CdmStatusLevel level, String message) -> {
             Assert.fail(message);
@@ -41,7 +44,7 @@ public class CorpusTest {
      */
     @Test
     public void testComputeLastModifiedTimeAsync() throws InterruptedException {
-        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "TestComputeLastModifiedTimeAsync", null);
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "TestComputeLastModifiedTimeAsync");
 
         corpus.setEventCallback((CdmStatusLevel level, String message) -> {
             Assert.fail(message);
@@ -51,11 +54,28 @@ public class CorpusTest {
     }
 
     /**
+     * Tests if the OM is able to load a data type with a cycle and log an error when that occurs.
+     */
+    @Test
+    public void testCycleInDataType() throws InterruptedException {
+        final HashSet<CdmLogCode> expectedLogCodes = new HashSet<> (Arrays.asList(CdmLogCode.ErrCycleInObjectDefinition, CdmLogCode.ErrResolutionFailure));
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testCycleInDataType", false, expectedLogCodes);
+
+        // Force the symbols to be resolved.
+        final ResolveOptions resOpt = new ResolveOptions();
+        resOpt.setImportsLoadStrategy(ImportsLoadStrategy.Load);
+
+        corpus.<CdmDocumentDefinition>fetchObjectAsync("local:/doc.cdm.json", null, resOpt).join();
+
+        TestHelper.assertCdmLogCodeEquality(corpus, CdmLogCode.ErrCycleInObjectDefinition, true);
+    }
+
+    /**
      * Tests the FetchObjectAsync function with the lazy imports load.
      */
     @Test
     public void testLazyLoadImports() throws InterruptedException {
-        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testImportsLoadStrategy", null);
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testImportsLoadStrategy");
         corpus.setEventCallback((CdmStatusLevel level, String message) -> {
             // when the imports are not loaded, there should be no reference validation.
             // no error should be logged.
@@ -73,7 +93,7 @@ public class CorpusTest {
      */
     @Test
     public void testLazyLoadCreateResolvedEntity() throws InterruptedException {
-        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testLazyLoadCreateResolvedEntity", null);
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testLazyLoadCreateResolvedEntity");
         corpus.setEventCallback((CdmStatusLevel level, String message) -> {
             // no error should be logged.
             Assert.fail(message);
@@ -105,7 +125,7 @@ public class CorpusTest {
     @Test
     public void testLoadImports() throws InterruptedException {
         final AtomicInteger errorCount = new AtomicInteger(0);
-        CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testImportsLoadStrategy", null);
+        CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testImportsLoadStrategy");
         corpus.setEventCallback((CdmStatusLevel level, String message) -> {
             if (message.contains("Unable to resolve the reference")) {
                 errorCount.getAndIncrement();
@@ -121,7 +141,7 @@ public class CorpusTest {
         Assert.assertEquals(1, errorCount.get());
 
         errorCount.set(0);
-        corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testImportsLoadStrategy", null);
+        corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testImportsLoadStrategy");
         corpus.setEventCallback((CdmStatusLevel level, String message) -> {
             if (level == CdmStatusLevel.Warning && message.contains("Unable to resolve the reference")) {
                 errorCount.getAndIncrement();
@@ -136,5 +156,61 @@ public class CorpusTest {
         resOpt.setShallowValidation(true);
         corpus.<CdmDocumentDefinition>fetchObjectAsync("local:/doc.cdm.json", null, resOpt).join();
         Assert.assertEquals(1, errorCount.get());
+    }
+
+    /**
+    * Tests if a symbol imported with a moniker can be found as the last resource.
+    * When resolving symbolEntity with respect to wrtEntity, the symbol fromEntity should be found correctly.
+    */
+    @Test
+    public void testResolveConstSymbolReference() throws InterruptedException, ExecutionException {
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "testResolveConstSymbolReference");
+
+        corpus.setEventCallback((CdmStatusLevel level, String message) -> {
+            Assert.fail(message);
+        }, CdmStatusLevel.Warning);
+
+        final CdmEntityDefinition wrtEntity = corpus.<CdmEntityDefinition>fetchObjectAsync("local:/wrtConstEntity.cdm.json/wrtConstEntity").get();
+        final ResolveOptions resOpt = new ResolveOptions(wrtEntity, new AttributeResolutionDirectiveSet());
+        wrtEntity.createResolvedEntityAsync("NewEntity", resOpt);
+    }
+
+    /**
+     * Tests that errors when trying to cast objects after fetching is handled correctly.
+     */
+    @Test
+    public void testIncorrectCastOnFetch() throws InterruptedException {
+        final HashSet<CdmLogCode> expectedLogCodes = new HashSet<>(Arrays.asList(CdmLogCode.ErrInvalidCast));
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "TestIncorrectCastOnFetch", null, false, expectedLogCodes);
+        final CdmManifestDefinition manifest = corpus.<CdmManifestDefinition>fetchObjectAsync("local:/default.manifest.cdm.json").join();
+        // this function will fetch the entity inside it
+        corpus.calculateEntityGraphAsync(manifest).join();
+        TestHelper.assertCdmLogCodeEquality(corpus, CdmLogCode.ErrInvalidCast, true);
+    }
+
+    /**
+     * Test warning correctly logged when max depth is exceeded for Resolution Guidance
+     */
+    @Test
+    public void testMaxDepthExceededResolutionGuidance() throws InterruptedException {
+        final HashSet<CdmLogCode> expectedLogCodes = new HashSet<>(Arrays.asList(CdmLogCode.WarnMaxDepthExceeded ));
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "TestMaxDepthExceededResolutionGuidance", null, false, expectedLogCodes);
+
+        final CdmEntityDefinition entity = corpus.<CdmEntityDefinition>fetchObjectAsync("local:/firstEntity.cdm.json/firstEntity").join();
+        entity.createResolvedEntityAsync("resFirstEntity").join();
+        TestHelper.assertCdmLogCodeEquality(corpus, CdmLogCode.WarnMaxDepthExceeded, true);
+    }
+
+    /**
+     * Test warning correctly logged when max depth is exceeded for Projections
+     */
+    @Test
+    public void testMaxDepthExceededProjections() throws InterruptedException {
+        final HashSet<CdmLogCode> expectedLogCodes = new HashSet<>(Arrays.asList(CdmLogCode.WarnMaxDepthExceeded ));
+        final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(TESTS_SUBPATH, "TestMaxDepthExceededProjections", null, false, expectedLogCodes);
+
+        final CdmEntityDefinition entity = corpus.<CdmEntityDefinition>fetchObjectAsync("local:/A.cdm.json/A").join();
+        entity.createResolvedEntityAsync("resA").join();
+        TestHelper.assertCdmLogCodeEquality(corpus, CdmLogCode.WarnMaxDepthExceeded, true);
     }
 }

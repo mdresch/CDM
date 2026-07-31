@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Utilities.Network
@@ -75,7 +75,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.Utilities.Network
             if (!IsDisposed)
             {
                 IsDisposed = true;
-                this.Content.Dispose();
+                if (this.Content != null)
+                {
+                    this.Content.Dispose();
+                }
             }
         }
     }

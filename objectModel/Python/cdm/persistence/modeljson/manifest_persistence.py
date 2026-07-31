@@ -6,19 +6,21 @@ from collections import OrderedDict
 import uuid
 import dateutil.parser
 
-from cdm.enums import CdmObjectType
+from cdm.enums import CdmObjectType, CdmLogCode
 from cdm.persistence import PersistenceLayer
 from cdm.persistence.cdmfolder import ImportPersistence
-from cdm.utilities import logger, TraitToPropertyMap
+from cdm.utilities import logger, TraitToPropertyMap, Constants
+from cdm.utilities.string_utils import StringUtils
 
 from . import extension_helper, utils
 from .types import Model, ReferenceModel
 from .local_entity_declaration_persistence import LocalEntityDeclarationPersistence
 from .referenced_entity_declaration_persistence import ReferencedEntityDeclarationPersistence
 from .relationship_persistence import RelationshipPersistence
+from ..cdmfolder.types import Import
 
 if TYPE_CHECKING:
-    from cdm.objectmodel import CdmCorpusContext, CdmDocumentDefinition, CdmFolderDefinition, CdmManifestDefinition, CdmImport, CdmTraitDefinition
+    from cdm.objectmodel import CdmCorpusContext, CdmFolderDefinition, CdmManifestDefinition, CdmImport, CdmTraitDefinition
     from cdm.utilities import CopyOptions, ResolveOptions
 
 _TAG = 'ManifestPersistence'
@@ -39,8 +41,7 @@ class ManifestPersistence:
         extension_trait_def_list = []
 
         manifest = ctx.corpus.make_object(CdmObjectType.MANIFEST_DEF, obj.name)
-        # we need to set up folder path and namespace of a folio to be able to retrieve that object.
-        folder.documents.append(manifest, manifest.name)
+        manifest._virtual_location = folder.folder_path + PersistenceLayer.MODEL_JSON_EXTENSION
 
         imports = obj.get('imports')
         if imports:
@@ -48,8 +49,8 @@ class ManifestPersistence:
                 import_obj = ImportPersistence.from_data(ctx, an_import)
                 manifest.imports.append(import_obj)
 
-        if not any((import_present.corpus_path == 'cdm:/foundations.cdm.json' for import_present in manifest.imports)):
-            manifest.imports.append('cdm:/foundations.cdm.json')
+        if not any((import_present.corpus_path == Constants._FOUNDATIONS_CORPUS_PATH for import_present in manifest.imports)):
+            manifest.imports.append(Constants._FOUNDATIONS_CORPUS_PATH)
 
         if obj.get('modifiedTime'):
             manifest.last_file_modified_time = dateutil.parser.parse(obj.get('modifiedTime'))
@@ -60,7 +61,7 @@ class ManifestPersistence:
         if obj.get('lastFileStatusCheckTime'):
             manifest.last_file_status_check_time = dateutil.parser.parse(obj.get('lastFileStatusCheckTime'))
 
-        if obj.get('documentVersion'):
+        if not StringUtils.is_blank_by_cdm_standard(obj.get('documentVersion')):
             manifest.document_version = obj.get('documentVersion')
 
         if obj.get('application'):
@@ -115,18 +116,18 @@ class ManifestPersistence:
                 location = reference_models.get(reference_entity.modelId)
 
                 if not location:
-                    logger.error(_TAG, ctx, 'Model Id {} from {} not found in reference_models.'.format(reference_entity.modelId, reference_entity.name))
+                    logger.error(ctx, _TAG, "from_object", None, CdmLogCode.ERR_PERSIST_MODELJSON_MODEL_ID_NOT_FOUND, reference_entity.modelId, reference_entity.name)
                     return None
 
                 entity = await ReferencedEntityDeclarationPersistence.from_data(ctx, reference_entity, location)
             else:
-                logger.error(_TAG, ctx, 'There was an error while trying to parse entity type.')
+                logger.error(ctx, _TAG, 'from_object', None, CdmLogCode.ERR_PERSIST_MODELJSON_ENTITY_PARSING_ERROR)
 
             if entity:
                 manifest.entities.append(entity)
                 entity_schema_by_name[entity.entity_name] = entity.entity_path
             else:
-                logger.error(_TAG, ctx, 'There was an error while trying to parse entity type.')
+                logger.error(ctx, _TAG, 'from_object', None, CdmLogCode.ERR_PERSIST_MODELJSON_ENTITY_PARSING_ERROR)
 
         if obj.get('relationships'):
             for relationship in obj.get('relationships'):
@@ -135,7 +136,7 @@ class ManifestPersistence:
                 if relationship:
                     manifest.relationships.append(relationship)
                 else:
-                    logger.warning(_TAG, ctx, 'There was an error while trying to convert model.json local entity to cdm local entity declaration.')
+                    logger.warning(ctx, _TAG, ManifestPersistence.from_object.__name__, None, CdmLogCode.WARN_PERSIST_MODELJSON_REL_READ_FAILED)
 
         await utils.process_annotations_from_data(ctx, obj, manifest.exhibits_traits)
 
@@ -154,7 +155,7 @@ class ManifestPersistence:
         result = Model()
 
         # process_traits_and_annotations_to_data also processes extensions.
-        utils.process_traits_and_annotations_to_data(instance.ctx, result, instance.exhibits_traits)
+        await utils.process_traits_and_annotations_to_data(instance.ctx, result, instance.exhibits_traits)
 
         result.name = instance.manifest_name
         result.description = instance.explanation
@@ -205,18 +206,21 @@ class ManifestPersistence:
 
                     location = instance.ctx.corpus.storage.corpus_path_to_adapter_path(entity.entity_path)
 
-                    if not location:
-                        logger.error(_TAG, instance.ctx, 'Invalid entity path set in entity {}'.format(entity.entity_name))
+                    if StringUtils.is_blank_by_cdm_standard(location):
+                        logger.error(instance.ctx, _TAG,'to_data', instance.at_corpus_path, CdmLogCode.ERR_PERSIST_MODELJSON_INVALID_ENTITY_PATH, entity.entity_name)
                         element = None
 
                     reference_entity = element  # type: ReferenceEntity
                     if reference_entity:
-                        location = location[:location.rfind('/')]
+                        # path separator can differ depending on the adapter, cover the case where path uses '/' or '\'
+                        last_slash_location = location.rfind('/') if location.rfind('/') > location.rfind('\\') else location.rfind('\\')
+                        if last_slash_location > 0:
+                            location = location[:last_slash_location]
 
                         if reference_entity.modelId:
                             saved_location = reference_models.get(reference_entity.modelId)
                             if saved_location is not None and saved_location != location:
-                                logger.error(_TAG, instance.ctx, 'Same ModelId pointing to different locations')
+                                logger.error(instance.ctx, 'to_data', instance.at_corpus_path, _TAG, CdmLogCode.ERR_PERSIST_MODELJSON_MODEL_ID_DUPLICATION)
                                 element = None
                             elif saved_location is None:
                                 reference_models[reference_entity.modelId] = location
@@ -231,8 +235,7 @@ class ManifestPersistence:
                 if element:
                     result.entities.append(element)
                 else:
-                    logger.error(_TAG, instance.ctx,
-                                 'There was an error while trying to convert {}\'s entity declaration to model json format.'.format(entity.entity_name))
+                    logger.error(instance.ctx, _TAG, 'to_data', instance.at_corpus_path, CdmLogCode.ERR_PERSIST_MODELJSON_ENTITY_DECLARATION_CONVERSION_ERROR, entity.entity_name)
 
         if reference_models:
             result.referenceModels = []
@@ -248,16 +251,20 @@ class ManifestPersistence:
                 relationship = await RelationshipPersistence.to_data(cdm_relationship, res_opt, options, instance.ctx)
                 if relationship is not None:
                     result.relationships.append(relationship)
-                else:
-                    logger.error(_TAG, instance.ctx, 'There was an error while trying to convert cdm relationship to model.json relationship.')
-                    return None
+
+        result.imports = []
 
         if instance.imports:
-            result.imports = []
             for element in instance.imports:
                 import_obj = ImportPersistence.to_data(element, res_opt, options)
                 if import_obj:
                     result.imports.append(import_obj)
+
+        # Importing foundations.cdm.json to resolve trait properly on manifest
+        if instance.imports is None or instance.imports.item(Constants._FOUNDATIONS_CORPUS_PATH, check_moniker=False) is None:
+            foundations_import = Import()
+            foundations_import.corpusPath = Constants._FOUNDATIONS_CORPUS_PATH
+            result.imports.append(foundations_import)
 
         return result
 

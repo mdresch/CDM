@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
@@ -6,7 +6,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
     using Microsoft.CommonDataModel.ObjectModel.Cdm;
     using Microsoft.CommonDataModel.ObjectModel.Utilities;
     using Newtonsoft.Json.Linq;
-    using System;
     using System.Collections.Generic;
     internal class ResolvedTraitSet
     {
@@ -17,7 +16,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
 
         public ResolvedTraitSet(ResolveOptions resOpt)
         {
-            this.ResOpt = resOpt.Copy();
+            this.ResOpt = resOpt;
             this.Set = new List<ResolvedTrait>();
             this.LookupByTrait = new Dictionary<CdmTraitDefinition, ResolvedTrait>();
             this.HasElevated = false;
@@ -44,8 +43,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
             {
                 ResolvedTrait rtOld = traitSetResult.LookupByTrait[trait];
                 List<dynamic> avOld = null;
+                List<bool> wasSetOld = null;
                 if (rtOld.ParameterValues != null)
+                {
                     avOld = rtOld.ParameterValues.Values;
+                    wasSetOld = rtOld.ParameterValues.WasSet;
+                }
                 if (av != null && avOld != null)
                 {
                     // the new values take precedence
@@ -64,9 +67,11 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
                                     traitSetResult = traitSetResult.ShallowCopyWithException(trait);
                                     rtOld = traitSetResult.LookupByTrait[trait];
                                     avOld = rtOld.ParameterValues.Values;
+                                    wasSetOld = rtOld.ParameterValues.WasSet;
                                     copyOnWrite = false;
                                 }
                                 avOld[i] = ParameterValue.FetchReplacementValue(this.ResOpt, avOld[i], av[i], wasSet[i]);
+                                wasSetOld[i] = (wasSetOld[i] || wasSet[i]);
                             }
                         }
                         catch
@@ -74,6 +79,27 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
 
                         }
                     }
+                }
+                // is an explicit verb given with this reference?
+                if (toMerge.ExplicitVerb != null)
+                {
+                    if (copyOnWrite)
+                    {
+                        traitSetResult = traitSetResult.ShallowCopyWithException(trait);
+                        rtOld = traitSetResult.LookupByTrait[trait];
+                        copyOnWrite = false;
+                    }
+                    rtOld.ExplicitVerb = toMerge.ExplicitVerb;
+                }
+                // are meta traits set on this newer reference?
+                if (toMerge.MetaTraits != null && toMerge.MetaTraits.Count > 0)
+                {
+                    if (copyOnWrite)
+                    {
+                        traitSetResult = traitSetResult.ShallowCopyWithException(trait);
+                        rtOld = traitSetResult.LookupByTrait[trait];
+                    }
+                    rtOld.MetaTraits = new List<CdmTraitReferenceBase>(toMerge.MetaTraits);
                 }
             }
             else
@@ -118,6 +144,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
                 return this.LookupByTrait[trait];
             return null;
         }
+
         public ResolvedTrait Find(ResolveOptions resOpt, string traitName)
         {
             int l = this.Set.Count;
@@ -129,6 +156,20 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
             }
             return null;
         }
+
+        internal bool Remove(ResolveOptions resOpt, string traitName)
+        {
+            ResolvedTrait rt = this.Find(resOpt, traitName);
+            if (rt != null)
+            {
+                this.LookupByTrait.Remove(rt.Trait);
+                this.Set.Remove(rt);
+                return true;
+            }
+
+            return false;
+        }
+
         public int Size
         {
             get
@@ -152,12 +193,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
         public ResolvedTraitSet DeepCopy()
         {
             ResolvedTraitSet copy = new ResolvedTraitSet(this.ResOpt);
-            List<ResolvedTrait> newSet = copy.Set;
             for (int i = 0; i < this.Set.Count; i++)
             {
-                ResolvedTrait rt = this.Set[i];
-                rt = rt.Copy();
-                newSet.Add(rt);
+                ResolvedTrait rt = this.Set[i].Copy();
+                copy.Set.Add(rt);
                 copy.LookupByTrait.Add(rt.Trait, rt);
             }
             copy.HasElevated = this.HasElevated;
@@ -167,31 +206,30 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
         public ResolvedTraitSet ShallowCopyWithException(CdmTraitDefinition just)
         {
             ResolvedTraitSet copy = new ResolvedTraitSet(this.ResOpt);
-            List<ResolvedTrait> newSet = copy.Set;
             int l = this.Set.Count;
             for (int i = 0; i < l; i++)
             {
                 ResolvedTrait rt = this.Set[i];
                 if (rt.Trait == just)
                     rt = rt.Copy();
-                newSet.Add(rt);
+                copy.Set.Add(rt);
                 copy.LookupByTrait.Add(rt.Trait, rt);
             }
 
             copy.HasElevated = this.HasElevated;
             return copy;
         }
+
         public ResolvedTraitSet ShallowCopy()
         {
             ResolvedTraitSet copy = new ResolvedTraitSet(this.ResOpt);
             if (this.Set != null)
             {
-                List<ResolvedTrait> newSet = copy.Set;
                 int l = this.Set.Count;
                 for (int i = 0; i < l; i++)
                 {
                     ResolvedTrait rt = this.Set[i];
-                    newSet.Add(rt);
+                    copy.Set.Add(rt);
                     copy.LookupByTrait.Add(rt.Trait, rt);
                 }
             }
@@ -215,6 +253,16 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
             return collection;
         }
 
+        public void SetExplicitVerb(CdmTraitDefinition trait, CdmTraitReference verb)
+        {
+            ResolvedTrait resTrait = this.Get(trait);
+            resTrait.ExplicitVerb = verb;
+        }
+        public void SetMetaTraits(CdmTraitDefinition trait, List<CdmTraitReferenceBase> metaTraits)
+        {
+            ResolvedTrait resTrait = this.Get(trait);
+            resTrait.MetaTraits = new List<CdmTraitReferenceBase>(metaTraits);
+        }
         public void SetParameterValueFromArgument(CdmTraitDefinition trait, CdmArgumentDefinition arg)
         {
             ResolvedTrait resTrait = this.Get(trait);
@@ -226,9 +274,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.ResolvedModel
                 var paramDef = arg.GetParameterDef();
                 if (paramDef != null)
                 {
-                    int iParam = resTrait.ParameterValues.IndexOf(paramDef);
-                    av[iParam] = ParameterValue.FetchReplacementValue(this.ResOpt, av[iParam], newVal, true);
-                    resTrait.ParameterValues.WasSet[iParam] = true;
+                    resTrait.ParameterValues.SetParameterValue(this.ResOpt, paramDef.GetName(), newVal);
                 }
                 else
                 {

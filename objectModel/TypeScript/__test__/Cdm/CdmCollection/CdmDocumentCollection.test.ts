@@ -11,7 +11,7 @@ import {generateManifest} from './CdmCollectionHelperFunctions';
 // tslint:disable-next-line: max-func-body-length
 describe('Cdm/CdmCollection/CdmDocumentCollection', () => {
     it ('TestDocumentCollectionAdd', () => {
-        const manifest: CdmManifestDefinition = generateManifest('C:\\Nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
         const folder: CdmFolderDefinition = new CdmFolderDefinition(manifest.ctx, 'folder');
         folder.corpus = manifest.ctx.corpus;
         folder.folderPath = 'folderPath/';
@@ -35,10 +35,14 @@ describe('Cdm/CdmCollection/CdmDocumentCollection', () => {
             .toEqual(folder);
         expect(document.needsIndexing)
             .toBeTruthy();
+        
+        const doc: CdmDocumentDefinition = folder.documents.push(document);
+        expect(doc)
+            .toEqual(undefined);
     });
 
     it ('TestDocumentCollectionInsert', () => {
-        const manifest: CdmManifestDefinition = generateManifest('C:\\nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
         const folder: CdmFolderDefinition = new CdmFolderDefinition(manifest.ctx, 'folder');
         folder.inDocument = manifest;
         folder.corpus = manifest.ctx.corpus;
@@ -77,10 +81,14 @@ describe('Cdm/CdmCollection/CdmDocumentCollection', () => {
             .toBeTruthy();
         expect(manifest.ctx.corpus.documentLibrary.contains([folder, document]))
             .toBeTruthy();
+
+        folder.documents.insert(2, document);
+        expect(folder.documents.length)
+            .toEqual(3);
     });
 
     it ('TestDocumentColectionAddWithDocumentName', () => {
-        const manifest: CdmManifestDefinition = generateManifest('C:\\Nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
         const folder: CdmFolderDefinition = new CdmFolderDefinition(manifest.ctx, 'folder');
         folder.corpus = manifest.ctx.corpus;
         folder.folderPath = 'folderPath/';
@@ -106,7 +114,7 @@ describe('Cdm/CdmCollection/CdmDocumentCollection', () => {
     });
 
     it ('TestDocumentCollectionAddRange', () => {
-        const manifest: CdmManifestDefinition = generateManifest('C:\\Nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
         const folder: CdmFolderDefinition = new CdmFolderDefinition(manifest.ctx, 'folder');
         folder.corpus = manifest.ctx.corpus;
         folder.folderPath = 'folderPath/';
@@ -151,7 +159,7 @@ describe('Cdm/CdmCollection/CdmDocumentCollection', () => {
     });
 
     it ('TestDocumentCollectionRemove', () => {
-        const manifest: CdmManifestDefinition = generateManifest('C:\\Nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
         const folder: CdmFolderDefinition = new CdmFolderDefinition(manifest.ctx, 'folder');
         folder.corpus = manifest.ctx.corpus;
         folder.folderPath = 'folderPath/';
@@ -208,7 +216,7 @@ describe('Cdm/CdmCollection/CdmDocumentCollection', () => {
     });
 
     it ('TestDocumentCollectionRemoveAt', () => {
-        const manifest: CdmManifestDefinition = generateManifest('C:\\Nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
         const folder: CdmFolderDefinition = new CdmFolderDefinition(manifest.ctx, 'folder');
         folder.corpus = manifest.ctx.corpus;
         folder.folderPath = 'folderPath/';
@@ -250,7 +258,7 @@ describe('Cdm/CdmCollection/CdmDocumentCollection', () => {
     });
 
     it ('TestDocumentCollectionClear', () => {
-        const manifest: CdmManifestDefinition = generateManifest('C:\\Nothing');
+        const manifest: CdmManifestDefinition = generateManifest();
         const folder: CdmFolderDefinition = new CdmFolderDefinition(manifest.ctx, 'folder');
         folder.corpus = manifest.ctx.corpus;
         folder.folderPath = 'folderPath/';

@@ -8,6 +8,7 @@ import {
   CdmTraitReference,
   CdmTypeAttributeDefinition
 } from '../../../internal';
+import { testHelper } from '../../testHelper';
 import { projectionTestUtils } from '../../Utilities/projectionTestUtils';
 
 /**
@@ -34,7 +35,7 @@ describe('Cdm/Projection/ProjectionAddSupportingAttributeTest', (): void => {
   /**
    * The path between TestDataPath and TestName.
    */
-  const testsSubpath: string = 'Cdm/Projection/TestProjectionAddSupportingAttribute';
+  const testsSubpath: string = 'Cdm/Projection/ProjectionAddSupportingAttributeTest';
 
   /**
    * AddSupportingAttribute with replaceAsForeignKey operation in the same projection
@@ -42,7 +43,7 @@ describe('Cdm/Projection/ProjectionAddSupportingAttributeTest', (): void => {
 it('testCombineOpsProj', async () => {
     const testName: string = 'testCombineOpsProj';
     const entityName: string = 'NewPerson';
-    const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
     for (const resOpt of resOptsCombinations) {
       await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -78,7 +79,7 @@ it('testCombineOpsProj', async () => {
   it('testConditionalProj', async () => {
     const testName: string = 'testConditionalProj';
     const entityName: string = 'NewPerson';
-    const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
     // for (const resOpt of resOptsCombinations) {
     //   await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -129,7 +130,7 @@ it('testCombineOpsProj', async () => {
   it('testEntityAttribute', async () => {
     const testName: string = 'testEntityAttribute';
     const entityName: string = 'NewPerson';
-    const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
     for (const resOpt of resOptsCombinations) {
       await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -175,7 +176,7 @@ it('testCombineOpsProj', async () => {
   it('testEntityAttributeProj', async () => {
     const testName: string = 'testEntityAttributeProj';
     const entityName: string = 'NewPerson';
-    const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
     for (const resOpt of resOptsCombinations) {
       await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -208,7 +209,7 @@ it('testCombineOpsProj', async () => {
   it('testExtendsEntity', async () => {
     const testName: string = 'testExtendsEntity';
     const entityName: string = 'NewPerson';
-    const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
     for (const resOpt of resOptsCombinations) {
       await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -242,7 +243,7 @@ it('testCombineOpsProj', async () => {
   it('testExtendsEntityProj', async () => {
     const testName: string = 'testExtendsEntityProj';
     const entityName: string = 'NewPerson';
-    const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
     for (const resOpt of resOptsCombinations) {
       await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -276,7 +277,7 @@ it('testCombineOpsProj', async () => {
   it('testNestedProj', async () => {
     const testName: string = 'testNestedProj';
     const entityName: string = 'NewPerson';
-    const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
     for (const resOpt of resOptsCombinations) {
       await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -296,12 +297,38 @@ it('testCombineOpsProj', async () => {
   });
 
   /**
+   * Test resolving a type attribute with a nested add supporting attribute operation
+   */
+  it('TestNestedTypeAttributeProj', async () => {
+    const testName: string = 'testNestedTAProj';
+    const entityName: string = 'NewPerson';
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
+
+    for (const resOpt of resOptsCombinations) {
+      await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
+    }
+
+    const entity: CdmEntityDefinition = await corpus.fetchObjectAsync<CdmEntityDefinition>(`local:/${entityName}.cdm.json/${entityName}`);
+    const resolvedEntity: CdmEntityDefinition = await projectionTestUtils.getResolvedEntity(corpus, entity, ['referenceOnly']);
+
+    // Original set of attributes: ["PersonInfo"]
+    expect(resolvedEntity.attributes.length)
+      .toEqual(2);
+    expect((resolvedEntity.attributes.allItems[0] as CdmTypeAttributeDefinition).name)
+      .toEqual('name');
+    const supportingAttribute: CdmTypeAttributeDefinition = resolvedEntity.attributes.allItems[1] as CdmTypeAttributeDefinition;
+    expect(supportingAttribute.name)
+      .toEqual('name_display');
+    validateInSupportOfAttribute(supportingAttribute, 'name', false);
+  });
+
+  /**
    * Test resolving a type attribute using resolution guidance
    */
   it('testTypeAttribute', async () => {
     const testName: string = 'testTypeAttribute';
     const entityName: string = 'NewPerson';
-    const corpus: CdmCorpusDefinition = projectionTestUtils.getCorpus(testName, testsSubpath);
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
 
     // for (const resOpt of resOptsCombinations) {
     //   await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
@@ -310,7 +337,33 @@ it('testCombineOpsProj', async () => {
     const entity: CdmEntityDefinition = await corpus.fetchObjectAsync<CdmEntityDefinition>(`local:/${entityName}.cdm.json/${entityName}`);
     const resolvedEntity: CdmEntityDefinition = await projectionTestUtils.getResolvedEntity(corpus, entity, ['structured']);
 
-    // Original set of attributes: ['name', 'age', 'address', 'phoneNumber', 'email']
+    // Original set of attributes: ["PersonInfo"]
+    expect(resolvedEntity.attributes.length)
+      .toEqual(2);
+    expect((resolvedEntity.attributes.allItems[0] as CdmTypeAttributeDefinition).name)
+      .toEqual('PersonInfo');
+    const supportingAttribute: CdmTypeAttributeDefinition = resolvedEntity.attributes.allItems[1] as CdmTypeAttributeDefinition;
+    expect(supportingAttribute.name)
+      .toEqual('PersonInfo_display');
+    validateInSupportOfAttribute(supportingAttribute, 'PersonInfo', false);
+  });
+
+  /**
+   * Test resolving a type attribute with a nested add supporting attribute operation
+   */
+  it('testTypeAttributeProj', async () => {
+    const testName: string = 'testTypeAttributeProj';
+    const entityName: string = 'NewPerson';
+    const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, testName);
+
+    for (const resOpt of resOptsCombinations) {
+      await projectionTestUtils.loadEntityForResolutionOptionAndSave(corpus, testName, testsSubpath, entityName, resOpt);
+    }
+
+    const entity: CdmEntityDefinition = await corpus.fetchObjectAsync<CdmEntityDefinition>(`local:/${entityName}.cdm.json/${entityName}`);
+    const resolvedEntity: CdmEntityDefinition = await projectionTestUtils.getResolvedEntity(corpus, entity, ['structured']);
+
+    // Original set of attributes: ["PersonInfo"]
     expect(resolvedEntity.attributes.length)
       .toEqual(2);
     expect((resolvedEntity.attributes.allItems[0] as CdmTypeAttributeDefinition).name)
@@ -327,7 +380,7 @@ it('testCombineOpsProj', async () => {
    * @param fromAttribute
    */
   function validateInSupportOfAttribute(supportingAttribute: CdmAttributeItem, fromAttribute: string, checkVirtualTrait: boolean = true): void {
-    const inSupportOfTrait: CdmTraitReference = supportingAttribute.appliedTraits.item('is.addedInSupportOf');
+    const inSupportOfTrait: CdmTraitReference = supportingAttribute.appliedTraits.item('is.addedInSupportOf') as CdmTraitReference;
     expect(inSupportOfTrait)
       .not
       .toBeUndefined();

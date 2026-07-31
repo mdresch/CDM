@@ -6,8 +6,9 @@ package com.microsoft.commondatamodel.objectmodel.utilities;
 /**
  * String utilities.
  * 
- * @deprecated This class is extremely likely to be removed in the public interface, and not meant
- * to be called externally at all. Please refrain from using it.
+ * @deprecated This class is extremely likely to be removed in the public
+ *             interface, and not meant to be called externally at all. Please
+ *             refrain from using it.
  */
 @Deprecated
 public class StringUtils {
@@ -58,12 +59,23 @@ public class StringUtils {
   }
 
   /**
+   * Returns true if the string is null or empty ("") or blank by CDM standard.
+   *
+   * @param str String to check
+   *
+   * @return {@code true} if the string is null or empty ("") or blank by CDM standard, {@code false} otherwise.
+   */
+  public static boolean isBlankByCdmStandard(final String str) {
+    return StringUtils.isNullOrTrimEmpty(str);
+  }
+
+  /**
    * Capitalizes first letter of the given string.
    * @param str String to capitalize
    * @return Capitalized string
    */
   public static String capitalize(final String str) {
-    if (str == null || isNullOrEmpty(str))
+    if (isNullOrTrimEmpty(str))
       return str;
 
     if (str.length() == 1)
@@ -87,18 +99,14 @@ public class StringUtils {
    * @param value The value to be replaced instead of the pattern
    * @return string
    */
-  public static String replace(String source, char pattern, String value) {
+  public static String replace(final String source, final String pattern, String value) {
     if (value == null) {
       value = "";
     }
 
-    char lowerCasePattern = Character.toLowerCase(pattern);
-    char upperCasePattern = Character.toUpperCase(pattern);
-    String upperCaseValue = "";
-    
-    if (!isNullOrEmpty(value)) {
-        upperCaseValue = capitalize(value);
-    }
+    final String lowerCasePattern = pattern.toLowerCase();
+    final String upperCasePattern = StringUtils.capitalize(pattern);
+    final String upperCaseValue = !StringUtils.isNullOrTrimEmpty(value) ? StringUtils.capitalize(value) : "";
 
     String result = source.replace("{" + lowerCasePattern + "}", value);
     return result.replace("{" + upperCasePattern + "}", upperCaseValue);

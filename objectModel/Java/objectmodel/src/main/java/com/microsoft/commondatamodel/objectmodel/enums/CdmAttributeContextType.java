@@ -11,7 +11,9 @@ public enum CdmAttributeContextType {
   AddedAttributeIdentity,
   AddedAttributeSelectedType,
   AddedAttributeSupporting,
+  AddedAttributeNewArtifact,
   AttributeDefinition,
+  AttributeExcluded,
   AttributeGroup,
   Entity,
   EntityReferenceAsAttribute,
@@ -31,5 +33,8 @@ public enum CdmAttributeContextType {
   OperationRenameAttributes,
   OperationReplaceAsForeignKey,
   OperationIncludeAttributes,
-  OperationAddAttributeGroup
+  OperationAddAttributeGroup,
+  OperationAlterTraits,
+  OperationAddArtifactAttribute,
+  Unknown
 }

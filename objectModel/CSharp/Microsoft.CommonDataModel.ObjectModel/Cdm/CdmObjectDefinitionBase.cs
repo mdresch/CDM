@@ -1,10 +1,12 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 {
+    using Microsoft.CommonDataModel.ObjectModel.Enums;
     using Microsoft.CommonDataModel.ObjectModel.ResolvedModel;
     using Microsoft.CommonDataModel.ObjectModel.Utilities;
+    using Microsoft.CommonDataModel.ObjectModel.Utilities.Logging;
 
     public abstract class CdmObjectDefinitionBase : CdmObjectBase, CdmObjectDefinition
     {
@@ -35,11 +37,14 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 
         internal void CopyDef(ResolveOptions resOpt, CdmObjectDefinitionBase copy)
         {
+            copy.Ctx = this.Ctx;
             copy.DeclaredPath = this.DeclaredPath;
             copy.Explanation = this.Explanation;
             copy.ExhibitsTraits.Clear();
             foreach (var trait in this.ExhibitsTraits)
+            {
                 copy.ExhibitsTraits.Add(trait);
+            }
             copy.InDocument = this.InDocument; // if gets put into a new document, this will change. until, use the source
         }
 
@@ -68,14 +73,37 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             return false;
         }
 
+        /// <summary>
+        /// Given an initial path, returns this object's declared path
+        /// </summary>
+        /// <param name="pathFrom"></param>
+        /// <returns></returns>
+        internal virtual string UpdateDeclaredPath(string pathFrom)
+        {
+            return pathFrom + this.GetName();
+        }
+
         internal bool IsDerivedFromDef(ResolveOptions resOpt, CdmObjectReference baseCdmObjectRef, string name, string seek)
         {
             if (seek == name)
+            {
                 return true;
+            }
 
             CdmObjectDefinition def = baseCdmObjectRef?.FetchObjectDefinition<CdmObjectDefinition>(resOpt);
+
+            // detects a direct definition cycle, doesn't work for cases like A->B->A.
+            if (def == this)
+            {
+                Logger.Error(this.Ctx, nameof(CdmObjectDefinitionBase), nameof(this.IsDerivedFromDef), this.AtCorpusPath, CdmLogCode.ErrCycleInObjectDefinition);
+                return true;
+            }
+            
             if (def != null)
+            {
                 return def.IsDerivedFrom(seek, resOpt);
+            }
+
             return false;
         }
 
@@ -90,7 +118,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             // merge in dynamic that are exhibited by this class
             if (this.ExhibitsTraits != null)
             {
-                foreach (CdmTraitReference exhibitsTrait in this.ExhibitsTraits)
+                foreach (CdmTraitReferenceBase exhibitsTrait in this.ExhibitsTraits)
                 {
                     rtsb.MergeTraits(exhibitsTrait.FetchResolvedTraits(resOpt));
                 }
@@ -126,10 +154,11 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         internal override CdmObjectReference CreatePortableReference(ResolveOptions resOpt)
         {
             CdmObjectReferenceBase cdmObjectRef = this.Ctx.Corpus.MakeObject<CdmObjectReferenceBase>(CdmCorpusDefinition.MapReferenceType(this.ObjectType), "portable", true) as CdmObjectReferenceBase;
-            cdmObjectRef.ExplicitReference = this;
+            cdmObjectRef.PortableReference = this;
             cdmObjectRef.InDocument = this.InDocument; // where it started life
+            cdmObjectRef.Owner = this.Owner;
+
             return cdmObjectRef;
         }
-
     }
 }

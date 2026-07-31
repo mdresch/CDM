@@ -15,18 +15,17 @@
     <apache.checkstyle.version>3.1.0</apache.checkstyle.version>
     <apache.compiler.version>3.8.1</apache.compiler.version>
     <apache.commons.version>3.9</apache.commons.version>
-    <apache.commonio.version>2.6</apache.commonio.version>
-    <apache.httpcomponents.version>4.5.9</apache.httpcomponents.version>
-    <apache.logging.version>2.13.2</apache.logging.version>
+    <apache.commonio.version>2.7</apache.commonio.version>
+    <apache.httpcomponents.version>4.5.13</apache.httpcomponents.version>
     <apache.surefire.version>2.14</apache.surefire.version>
-    <fasterxml.jackson.version>2.10.0</fasterxml.jackson.version>
-    <google.guava.version>28.2-jre</google.guava.version>
-    <java.version>8</java.version>
-    <microsoft.adal4j.version>1.6.5</microsoft.adal4j.version>
+    <apache.commons-codec.version>1.15</apache.commons-codec.version>
+    <fasterxml.jackson.version>2.13.2</fasterxml.jackson.version>
+    <fasterxml.databind.version>2.13.4.2</fasterxml.databind.version>
+    <java.version>9</java.version>
+    <microsoft.msal4j.version>1.11.0</microsoft.msal4j.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <skycreamer.jsonassert.version>1.5.0</skycreamer.jsonassert.version>
-    <slf4j.version>1.7.25</slf4j.version>
-    <testng.testng.version>6.14.3</testng.testng.version>
+    <testng.testng.version>7.7.0</testng.testng.version>
   </properties>
 
   <name>com.microsoft.commondatamodel:objectmodel</name>
@@ -89,15 +88,15 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-lang3</artifactId>
-      <version>${apache.commons.version}</version>
+      <groupId>com.microsoft.commondatamodel</groupId>
+      <artifactId>cdmstandards</artifactId>
+      <version>${cdmstandards-revision}</version>
     </dependency>
 
     <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>${google.guava.version}</version>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+      <version>${apache.commons.version}</version>
     </dependency>
 
     <dependency>
@@ -115,7 +114,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
-      <version>${fasterxml.jackson.version}</version>
+      <version>${fasterxml.databind.version}</version>
     </dependency>
 
     <dependency>
@@ -132,8 +131,8 @@
 
     <dependency>
       <groupId>com.microsoft.azure</groupId>
-      <artifactId>adal4j</artifactId>
-      <version>${microsoft.adal4j.version}</version>
+      <artifactId>msal4j</artifactId>
+      <version>${microsoft.msal4j.version}</version>
     </dependency>
 
     <dependency>
@@ -156,23 +155,9 @@
     </dependency>
 
     <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-slf4j-impl</artifactId>
-      <version>${apache.logging.version}</version>
-      <scope>test</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-api</artifactId>
-      <version>${slf4j.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-core</artifactId>
-      <version>${apache.logging.version}</version>
-      <scope>test</scope>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+      <version>${apache.commons-codec.version}</version>
     </dependency>
 
     <dependency>
@@ -194,8 +179,6 @@
       <plugin>
         <configuration>
           <release>${java.version}</release>
-          <source>1.8</source>
-          <target>1.8</target>
         </configuration>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -241,15 +224,25 @@
     <resources>
       <resource>
         <directory>../../../schemaDocuments</directory>
+        <includes>
+          <include>**/cdmfoundation/**</include>
+          <include>**/extensions/**</include>
+          <include>foundations.cdm.json</include>
+          <include>meanings.cdm.json</include>
+          <include>primitives.cdm.json</include>
+          <include>schema.cdm.json</include>
+          <include>foundations.*.cdm.json</include>
+          <include>meanings.*.cdm.json</include>
+          <include>actions.*.cdm.json</include>
+          <include>verbs.*.cdm.json</include>
+          <include>relationshipPurposes.*.cdm.json</include>
+          <include>primitives.*.cdm.json</include>
+          <include>schema.*.cdm.json</include>
+        </includes>
         <excludes>
-          <exclude>**/core/**</exclude>
-          <exclude>**/office/**</exclude>
+          <exclude>**/*.manifest.cdm.json</exclude>
+          <exclude>*.0.*.cdm.json</exclude>
           <exclude>*.manifest.cdm.json</exclude>
-          <exclude>*.0.7.cdm.json</exclude>
-          <exclude>*.0.8.cdm.json</exclude>
-          <exclude>*.0.8.1.cdm.json</exclude>
-          <exclude>*.0.9.cdm.json</exclude>
-          <exclude>*.1.0.cdm.json</exclude>
           <exclude>*.md</exclude>
           <exclude>*.jpg</exclude>
         </excludes>

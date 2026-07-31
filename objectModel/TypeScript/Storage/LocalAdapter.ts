@@ -5,8 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as util from 'util';
 import { StorageUtils } from '../Utilities/StorageUtils';
-import { configObjectType } from './StorageAdapter';
-import { StorageAdapterBase } from './StorageAdapterBase';
+import { CdmFileMetadata, configObjectType, StorageAdapterBase } from '../internal';
 
 let readFile, writeFile, stat, mkdir, readdir;
 
@@ -103,11 +102,21 @@ export class LocalAdapter extends StorageAdapterBase {
     }
 
     public async computeLastModifiedTimeAsync(corpusPath: string): Promise<Date> {
+        const fileMetadata: CdmFileMetadata = await this.fetchFileMetadataAsync(corpusPath);
+
+        if (fileMetadata == undefined) {
+            return undefined;
+        }
+
+        return fileMetadata.lastModifiedTime;
+    }
+
+    public async fetchFileMetadataAsync(corpusPath: string): Promise<CdmFileMetadata> {
         try {
             const adapterPath: string = this.createAdapterPath(corpusPath);
             const stats: fs.Stats = await stat(adapterPath) as fs.Stats;
 
-            return stats.mtime;
+            return { lastModifiedTime: stats.mtime, fileSizeBytes: stats.size };
         } catch (err) {
             return undefined;
         }
@@ -118,6 +127,19 @@ export class LocalAdapter extends StorageAdapterBase {
         // Returns a list corpus paths to all files and folders at or under the
         // provided corpus path to a folder
         return this._fetchAllFilesAsync(folderCorpusPath);
+    }
+
+    public async fetchAllFilesMetadataAsync(folderCorpusPath: string): Promise<Map<string, CdmFileMetadata>> {
+        const fileMetadatas: Map<string, CdmFileMetadata> = new Map<string, CdmFileMetadata>();
+        const fileNames: string[] = await this.fetchAllFilesAsync(folderCorpusPath);
+
+        for (const fileName of fileNames) {
+            const path: string = this.createAdapterPath(fileName);
+            const stats: fs.Stats = await stat(path);
+            fileMetadatas.set(fileName, { lastModifiedTime: stats.mtime, fileSizeBytes: stats.isFile ? stats.size : undefined });
+        }
+
+        return fileMetadatas;
     }
 
     public fetchConfig(): string {

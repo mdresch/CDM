@@ -4,20 +4,27 @@
 import {
     AttributeContextParameters,
     CdmAttributeContext,
+    CdmAttributeItem,
     CdmCollection,
+    CdmConstantEntityDefinition,
     CdmCorpusContext,
     CdmCorpusDefinition,
     CdmDocumentDefinition,
+    CdmEntityReference,
+    cdmLogCode,
     CdmObject,
     CdmObjectDefinition,
     CdmObjectReference,
-    CdmObjectReferenceBase,
     cdmObjectType,
     CdmParameterDefinition,
+    CdmTraitCollection,
+    CdmTraitDefinition,
+    CdmTraitGroupReference,
     CdmTraitReference,
     copyOptions,
-    DepthInfo,
     isEntityAttributeDefinition,
+    isEntityDefinition,
+    Logger,
     resolveContext,
     ResolvedAttributeSet,
     ResolvedAttributeSetBuilder,
@@ -26,6 +33,8 @@ import {
     ResolvedTraitSetBuilder,
     resolveOptions,
     SymbolSet,
+    traitProfile,
+    traitProfileCache,
     VisitCallback
 } from '../internal';
 import { PersistenceLayer } from '../Persistence';
@@ -33,6 +42,23 @@ import { CdmJsonType } from '../Persistence/CdmFolder/types';
 
 export abstract class CdmObjectBase implements CdmObject {
 
+    /**
+     * The minimum json semantic versions that can be loaded by this ObjectModel version.
+     */
+    public static jsonSchemaSemanticVersionMinimumLoad = '1.0.0';
+    /**
+     * The minimum json semantic versions that can be saved by this ObjectModel version.
+     */
+    public static jsonSchemaSemanticVersionMinimumSave = '1.1.0';
+    /**
+     * The maximum json semantic versions that can be loaded and saved by this ObjectModel version.
+     */
+    public static jsonSchemaSemanticVersionMaximumSaveLoad = '1.5.0';
+
+    // known semantic versions changes
+    public static jsonSchemaSemanticVersionProjections = "1.4.0";
+    public static jsonSchemaSemanticVersionTraitsOnTraits = "1.5.0";
+    
     public inDocument: CdmDocumentDefinition;
     public ID: number;
     public objectType: cdmObjectType;
@@ -40,9 +66,9 @@ export abstract class CdmObjectBase implements CdmObject {
 
     public get atCorpusPath(): string {
         if (!this.inDocument) {
-            return `NULL:/NULL/${this.declaredPath}`;
+            return `undefined:/undefined/${this.declaredPath ? this.declaredPath : ''}`;
         } else {
-            return `${this.inDocument.atCorpusPath}/${this.declaredPath}`;
+            return `${this.inDocument.atCorpusPath}/${this.declaredPath ? this.declaredPath : ''}`;
         }
     }
 
@@ -56,8 +82,6 @@ export abstract class CdmObjectBase implements CdmObject {
      */
     public declaredPath: string;
     public owner: CdmObject;
-    public resolvingAttributes: boolean = false;
-    protected circularReference: boolean;
     private resolvingTraits: boolean = false;
     constructor(ctx: CdmCorpusContext) {
         this.ID = CdmCorpusDefinition.nextID();
@@ -107,43 +131,50 @@ export abstract class CdmObjectBase implements CdmObject {
      * @internal
      */
     public static resolvedTraitToTraitRef(resOpt: resolveOptions, rt: ResolvedTrait): CdmTraitReference {
-        let traitRef: CdmTraitReference;
+        // if nothing extra needs a mention, make a simple string ref
+        let traitRef: CdmTraitReference = rt.trait.ctx.corpus.MakeObject<CdmTraitReference>(cdmObjectType.traitRef, rt.traitName, 
+            !((rt.parameterValues !== undefined && rt.parameterValues.length > 0) || 
+            rt.explicitVerb !== undefined || rt.metaTraits !== undefined));
+
         if (rt.parameterValues && rt.parameterValues.length) {
-            traitRef = rt.trait.ctx.corpus.MakeObject(cdmObjectType.traitRef, rt.traitName, false);
             const l: number = rt.parameterValues.length;
             if (l === 1) {
                 // just one argument, use the shortcut syntax
-                let val: string | object | CdmObject = rt.parameterValues.values[0];
+                let val: string | object | CdmObject = CdmObjectBase.protectParameterValues(resOpt, rt.parameterValues.values[0]);
                 if (val !== undefined) {
-                    if (typeof val === 'object' && 'copy' in val && typeof val.copy === 'function') {
-                        val = val.copy(resOpt);
-                    }
                     traitRef.arguments.push(undefined, val);
                 }
             } else {
                 for (let i: number = 0; i < l; i++) {
                     const param: CdmParameterDefinition = rt.parameterValues.fetchParameterAtIndex(i);
-                    let val: string | object | CdmObject = rt.parameterValues.values[i];
+                    let val: string | object | CdmObject = CdmObjectBase.protectParameterValues(resOpt, rt.parameterValues.values[i]);
                     if (val !== undefined) {
-                        if (typeof val === 'object' && 'copy' in val && typeof val.copy === 'function') {
-                            val = val.copy(resOpt);
-                        } else if (typeof val === 'object') {
-                            val = { ...val };
-                        }
                         traitRef.arguments.push(param.name, val);
                     }
                 }
             }
-        } else {
-            traitRef = rt.trait.ctx.corpus.MakeObject(cdmObjectType.traitRef, rt.traitName, true);
+        } 
+        if (rt.explicitVerb !== undefined) {
+            traitRef.verb = rt.explicitVerb.copy(resOpt) as CdmTraitReference;
+            traitRef.verb.owner = traitRef;
         }
+
+        if (rt.metaTraits !== undefined) {
+            for (const trMeta of rt.metaTraits) {
+                let trMetaCopy = trMeta.copy(resOpt) as CdmTraitReference;
+                traitRef.appliedTraits.push(trMetaCopy);
+            }
+        }
+
         if (resOpt.saveResolutionsOnCopy) {
             // used to localize references between documents
             traitRef.explicitReference = rt.trait;
-            traitRef.inDocument = rt.trait.inDocument;
+            traitRef.inDocument = (rt.trait as CdmTraitDefinition).inDocument;
         }
         // always make it a property when you can, however the dataFormat traits should be left alone
-        if (rt.trait.associatedProperties && !rt.trait.isDerivedFrom('is.dataFormat', resOpt)) {
+        // also the wellKnown is the first constrained list that uses the datatype to hold the table instead of the default value property.
+        // so until we figure out how to move the enums away from default value, show that trait too
+        if (rt.trait.associatedProperties && rt.trait.associatedProperties.length > 0 && !rt.trait.isDerivedFrom('is.dataFormat', resOpt) && rt.trait.traitName !== 'is.constrainedList.wellKnown') {
             traitRef.isFromProperty = true;
         }
 
@@ -151,13 +182,17 @@ export abstract class CdmObjectBase implements CdmObject {
     }
 
     public abstract isDerivedFrom(baseDef: string, resOpt?: resolveOptions): boolean;
-    public abstract copy(resOpt: resolveOptions, host?: CdmObject): CdmObject;
+    public abstract copy(resOpt?: resolveOptions, host?: CdmObject): CdmObject;
     public abstract validate(): boolean;
 
     public abstract getObjectType(): cdmObjectType;
     public abstract fetchObjectDefinitionName(): string;
     public abstract fetchObjectDefinition<T extends CdmObjectDefinition>(resOpt: resolveOptions): T;
     public abstract createSimpleReference(resOpt: resolveOptions): CdmObjectReference;
+    /**
+     * @internal
+     */
+    public abstract createPortableReference(resOpt: resolveOptions): CdmObjectReference;
 
     /**
      * @deprecated
@@ -165,7 +200,89 @@ export abstract class CdmObjectBase implements CdmObject {
     public copyData(resOpt: resolveOptions, options?: copyOptions): CdmJsonType {
         const persistenceType: string = 'CdmFolder';
 
+        if (resOpt === undefined) {
+            resOpt = new resolveOptions(this, this.ctx.corpus.defaultResolutionDirectives);
+        }
+
+        if (options === undefined) {
+            options = new copyOptions();
+        }
+
         return PersistenceLayer.toData(this, resOpt, options, persistenceType);
+    }
+
+    /// returns a list of traitProfile descriptions, one for each trait applied to or exhibited by this object.
+    /// each description of a trait is an expanded picture of a trait reference.
+    /// the goal of the profile is to make references to structured, nested, messy traits easier to understand and compare.
+    /// we do this by promoting and merging some information as far up the trait inheritance / reference chain as far as we can without 
+    /// giving up important meaning.
+    /// in general, every trait profile includes:
+    /// 1. the name of the trait
+    /// 2. a TraitProfile for any trait that this trait may 'extend', that is, a base class trait
+    /// 3. a map of argument / parameter values that have been set
+    /// 4. an applied 'verb' trait in the form of a TraitProfile
+    /// 5. an array of any "classifier" traits that have been applied
+    /// 6. and array of any other (non-classifier) traits that have been applied or exhibited by this trait
+    /// 
+    /// when 'consolidated' adjustments to these ideas happen as trait information is 'bubbled up' from base definitons. adjustments include
+    /// 1. the most recent verb trait that was defined or applied will propigate up the hierarchy for all references even those that do not specify a verb. 
+    /// This ensures the top trait profile depicts the correct verb
+    /// 2. traits that are applied or exhibited by another trait using the 'classifiedAs' verb are put into a different collection called classifiers.
+    /// 3. classifiers are accumulated and promoted from base references up to the final trait profile. this way the top profile has a complete list of classifiers 
+    /// but the 'deeper' profiles will not have the individual classifications set (to avoid an explosion of info)
+    /// 3. In a similar way, trait arguments will accumulate from base definitions and default values. 
+    /// 4. traits used as 'verbs' (defaultVerb or explicit verb) will not include classifier descriptions, this avoids huge repetition of somewhat pointless info and recursive effort
+    /// 
+
+    public fetchTraitProfiles(resOpt: resolveOptions = undefined, cache: traitProfileCache = undefined, forVerb: string = undefined): Array<traitProfile>
+    {
+        if (cache === undefined) {
+            cache = new traitProfileCache();
+        }
+
+        if (resOpt === undefined) {
+            // resolve symbols with default directive and WRTDoc from this object's point of view
+            resOpt = new resolveOptions(this, this.ctx.corpus.defaultResolutionDirectives);
+        }
+
+        var result = new Array<traitProfile>();
+
+        let traits: CdmTraitCollection = undefined;
+        let prof: traitProfile = undefined;
+        const objType = this.objectType;
+        if (objType === cdmObjectType.typeAttributeDef || objType === cdmObjectType.entityAttributeDef || objType === cdmObjectType.attributeGroupRef) {
+            traits = (this as unknown as CdmAttributeItem).appliedTraits;
+        } else if (objType === cdmObjectType.traitDef) {
+            prof = traitProfile.traitDefToProfile(this as unknown as CdmTraitDefinition, resOpt, false, false, cache);
+        } else if ((this as unknown as CdmObjectDefinition).exhibitsTraits !== undefined) {
+            traits = (this as unknown as CdmObjectDefinition).exhibitsTraits;
+        } else if (objType === cdmObjectType.traitRef) {
+            prof = traitProfile.traitRefToProfile(this as unknown as CdmTraitReference, resOpt, false, false, true, cache);
+        } else if (objType === cdmObjectType.traitGroupRef) {
+            prof = traitProfile.traitRefToProfile(this as unknown as CdmTraitGroupReference, resOpt, false, false, true, cache);
+        } else if ((this as unknown as CdmObjectReference).appliedTraits !== undefined) {
+            traits = (this as unknown as CdmObjectReference).appliedTraits;
+        }
+        // one of these two will happen
+        if (prof !== undefined) {
+            if (prof.verb === undefined || forVerb === undefined || prof.verb.traitName === forVerb)
+                result.push(prof);
+        }
+        if (traits !== undefined) {
+            for (const tr of traits) {
+                prof = traitProfile.traitRefToProfile(tr, resOpt, false, false, true, cache);
+                if (prof !== undefined) {
+                    if (prof.verb === undefined || forVerb === undefined || prof.verb.traitName === forVerb)
+                        result.push(prof);
+                }
+            }
+        } 
+
+        if (result.length === 0) {
+            result = undefined;
+        }
+
+        return result;
     }
 
     /**
@@ -264,7 +381,7 @@ export abstract class CdmObjectBase implements CdmObject {
         const ctx: resolveContext = this.ctx as resolveContext; // what it actually is
         const cacheTag: string = ctx.corpus.createDefinitionCacheTag(resOpt, this, kind, acpInContext ? 'ctx' : '');
 
-        return cacheTag ? ctx.cache.get(cacheTag) : undefined;
+        return cacheTag ? ctx.attributeCache.get(cacheTag) : undefined;
     }
 
     /**
@@ -279,8 +396,24 @@ export abstract class CdmObjectBase implements CdmObject {
                 resOpt = new resolveOptions(this, this.ctx.corpus.defaultResolutionDirectives);
             }
 
+            let inCircularReference: boolean = false;
+            const wasInCircularReference: boolean = resOpt.inCircularReference;
+            if (isEntityDefinition(this)) {
+                inCircularReference = resOpt.currentlyResolvingEntities.has(this);
+                resOpt.currentlyResolvingEntities.add(this);
+                resOpt.inCircularReference = inCircularReference;
+
+                // uncomment this line as a test to turn off allowing cycles
+                //if (inCircularReference) {
+                //    return new ResolvedAttributeSet();
+                //}
+            }
+
+            const currentDepth: number = resOpt.depthInfo.currentDepth;
+
             const kind: string = 'rasb';
             const ctx: resolveContext = this.ctx as resolveContext; // what it actually is
+            let rasbResult: ResolvedAttributeSetBuilder;
             let rasbCache: ResolvedAttributeSetBuilder = this.fetchObjectFromCache(resOpt, acpInContext);
             let underCtx: CdmAttributeContext;
 
@@ -289,95 +422,95 @@ export abstract class CdmObjectBase implements CdmObject {
             const currSymRefSet: SymbolSet = resOpt.symbolRefSet || new SymbolSet();
             resOpt.symbolRefSet = new SymbolSet();
 
-            // get the moniker that was found and needs to be appended to all
-            // refs in the children attribute context nodes
-            const fromMoniker: string = resOpt.fromMoniker;
-            resOpt.fromMoniker = undefined;
-
             // if using the cache passes the maxDepth, we cannot use it
-            if (rasbCache && resOpt.depthInfo && resOpt.depthInfo.currentDepth + rasbCache.ras.depthTraveled > resOpt.depthInfo.maxDepth) {
+            if (rasbCache && resOpt.depthInfo.currentDepth + rasbCache.ras.depthTraveled > resOpt.depthInfo.maxDepth) {
+                Logger.warning(ctx, 'CdmObjectBase', this.fetchResolvedAttributes.name, this.atCorpusPath, cdmLogCode.WarnMaxDepthExceeded, resOpt.depthInfo.maxDepth, this.fetchObjectDefinitionName());
                 rasbCache = undefined;
             }
 
             if (!rasbCache) {
-                if (this.resolvingAttributes) {
-                    // re-entered this attribute through some kind of self or looping reference.
-                    this.ctx.corpus.isCurrentlyResolving = wasPreviouslyResolving;
-                    resOpt.inCircularReference = true;
-                    this.circularReference = true;
-                }
-                this.resolvingAttributes = true;
-
-                // if a new context node is needed for these attributes, make it now
-                if (acpInContext) {
-                    underCtx = CdmAttributeContext.createChildUnder(resOpt, acpInContext);
-                }
+                // a new context node is needed for these attributes, 
+                // this tree will go into the cache, so we hang it off a placeholder parent
+                // when it is used from the cache (or now), then this placeholder parent is ignored and the things under it are
+                // put into the 'receiving' tree
+                underCtx = CdmAttributeContext.getUnderContextForCacheContext(resOpt, this.ctx, acpInContext);
 
                 rasbCache = this.constructResolvedAttributes(resOpt, underCtx);
 
                 if (rasbCache !== undefined) {
-
-                    this.resolvingAttributes = false;
-
                     // register set of possible docs
                     const odef: CdmObject = this.fetchObjectDefinition(resOpt);
                     if (odef !== undefined) {
                         ctx.corpus.registerDefinitionReferenceSymbols(odef, kind, resOpt.symbolRefSet);
 
-                        // get the new cache tag now that we have the list of symbols
-                        const cacheTag: string = ctx.corpus.createDefinitionCacheTag(resOpt, this, kind, acpInContext ? 'ctx' : '');
-                        // save this as the cached version
-                        if (cacheTag) {
-                            ctx.cache.set(cacheTag, rasbCache);
-                        }
-
-                        if (this instanceof CdmObjectReferenceBase &&
-                            fromMoniker &&
-                            acpInContext &&
-                            (this as unknown as CdmObjectReferenceBase).namedReference) {
-                            // create a fresh context
-                            const oldContext: CdmAttributeContext =
-                                acpInContext.under.contents.allItems[acpInContext.under.contents.length - 1] as CdmAttributeContext;
-                            acpInContext.under.contents.removeAt(acpInContext.under.contents.length - 1);
-                            underCtx = CdmAttributeContext.createChildUnder(resOpt, acpInContext);
-
-                            const newContext: CdmAttributeContext =
-                                oldContext.copyAttributeContextTree(resOpt, underCtx, rasbCache.ras, undefined, fromMoniker);
-                            // since THIS should be a refererence to a thing found in a moniker document,
-                            // it already has a moniker in the reference this function just added that same moniker
-                            // to everything in the sub-tree but now this one symbol has too many remove one
-                            const monikerPathAdded: string = `${fromMoniker}/`;
-                            if (newContext.definition && newContext.definition.namedReference &&
-                                newContext.definition.namedReference.startsWith(monikerPathAdded)) {
-                                // slice it off the front
-                                newContext.definition.namedReference = newContext.definition.namedReference.substring(monikerPathAdded.length);
+                        if (this.objectType === cdmObjectType.entityDef) {
+                            // if we just got attributes for an entity, take the time now to clean up this cached tree and prune out
+                            // things that don't help explain where the final set of attributes came from
+                            if (underCtx) {
+                                const scopesForAttributes = new Set<CdmAttributeContext>();
+                                underCtx.collectContextFromAtts(rasbCache.ras, scopesForAttributes); // the context node for every final attribute
+                                if (!underCtx.pruneToScope(scopesForAttributes)) {
+                                    return undefined;
+                                }
                             }
                         }
-                    }
-                }
 
-                if (this.circularReference) {
-                    resOpt.inCircularReference = false;
+                        // get the new cache tag now that we have the list of docs
+                        const cacheTag: string = ctx.corpus.createDefinitionCacheTag(resOpt, this, kind, acpInContext ? 'ctx' : undefined);
+                        // save this as the cached version
+                        if (cacheTag) {
+                            ctx.attributeCache.set(cacheTag, rasbCache);
+                        }
+                    }
+
+                        // get the 'underCtx' of the attribute set from the acp that is wired into
+                        // the target tree
+                        underCtx = rasbCache.ras.attributeContext ?
+                            rasbCache.ras.attributeContext.getUnderContextFromCacheContext(resOpt, acpInContext) : undefined;
                 }
             } else {
-                // cache found. if we are building a context, then fix what we got instead of making a new one
-                if (acpInContext) {
-                    // make the new context
-                    underCtx = CdmAttributeContext.createChildUnder(resOpt, acpInContext);
+                // get the 'underCtx' of the attribute set from the cache. The one stored there was build with a different
+                // acp and is wired into the fake placeholder. so now build a new underCtx wired into the output tree but with
+                // copies of all cached children
+                underCtx = rasbCache.ras.attributeContext ?
+                    rasbCache.ras.attributeContext.getUnderContextFromCacheContext(resOpt, acpInContext) : undefined;
+                //underCtx.validateLineage(resOpt); // debugging
+            }
 
-                    (rasbCache.ras.attributeContext).copyAttributeContextTree(resOpt, underCtx, rasbCache.ras, undefined, fromMoniker);
+            if (rasbCache) {
+                // either just built something or got from cache
+                // either way, same deal: copy resolved attributes and copy the context tree associated with it
+                // 1. deep copy the resolved att set (may have groups) and leave the attCtx pointers set to the old tree
+                // 2. deep copy the tree. 
+
+                // 1. deep copy the resolved att set (may have groups) and leave the attCtx pointers set to the old tree
+                rasbResult = new ResolvedAttributeSetBuilder();
+                rasbResult.ras = rasbCache.ras.copy();
+
+                // 2. deep copy the tree and map the context references. 
+                if (underCtx) // undefined context? means there is no tree, probably 0 attributes came out
+                {
+                    if (!underCtx.associateTreeCopyWithAttributes(resOpt, rasbResult.ras)) {
+                        return undefined;
+                    }
                 }
             }
 
-            const currDepthInfo: DepthInfo = resOpt.depthInfo;
-            if (isEntityAttributeDefinition(this) && currDepthInfo) {
+            if (isEntityAttributeDefinition(this)) {
                 // if we hit the maxDepth, we are now going back up
-                currDepthInfo.currentDepth--;
+                resOpt.depthInfo.currentDepth = currentDepth;
                 // now at the top of the chain where max depth does not influence the cache
-                if (currDepthInfo.currentDepth <= 0) {
-                    resOpt.depthInfo = undefined;
+                if (resOpt.depthInfo.currentDepth === 0) {
+                    resOpt.depthInfo.maxDepthExceeded = false;
                 }
             }
+
+            if (!inCircularReference && isEntityDefinition(this)) {
+                // should be removed from the root level only
+                // if it is in a circular reference keep it there
+                resOpt.currentlyResolvingEntities.delete(this);
+            }
+            resOpt.inCircularReference = wasInCircularReference;
 
             // merge child reference symbols set with current
             currSymRefSet.merge(resOpt.symbolRefSet);
@@ -385,7 +518,7 @@ export abstract class CdmObjectBase implements CdmObject {
 
             this.ctx.corpus.isCurrentlyResolving = wasPreviouslyResolving;
 
-            return rasbCache !== undefined ? rasbCache.ras : undefined;
+            return rasbResult ? rasbResult.ras : undefined;
         }
         // return p.measure(bodyCode);
     }
@@ -402,4 +535,77 @@ export abstract class CdmObjectBase implements CdmObject {
     }
 
     public abstract visit(path: string, preChildren: VisitCallback, postChildren: VisitCallback): boolean;
+
+    private static protectParameterValues(resOpt: resolveOptions, val: any) {
+        if (val) {
+            // the value might be a contant entity object, need to protect the original 
+            let cEnt: any = (val as CdmEntityReference) ? (val as CdmEntityReference).explicitReference as CdmConstantEntityDefinition : undefined;
+            if (cEnt) {
+                // copy the constant entity AND the reference that holds it
+                cEnt = cEnt.copy(resOpt) as CdmConstantEntityDefinition;
+                val = (val as CdmEntityReference).copy(resOpt);
+                (val as CdmEntityReference).explicitReference = cEnt;
+            }
+        }
+        return val;
+    }
+
+    /**
+     * converts a string in the form MM.mm.pp into a single comparable long integer
+     * limited to 3 parts where each part is 5 numeric digits or fewer
+     * returns -1 if failure
+     */
+    public static semanticVersionStringToNumber(version: string): number {
+        
+        if (version === undefined) {
+            return -1;
+        }
+
+        // must have the three parts
+        const semanticVersionSplit: string[] = version.split('.');
+        if (semanticVersionSplit.length != 3) {
+            return -1;
+        }
+
+        // accumulate the result
+        let numVer = 0;
+        for (let i = 0; i < 3; ++i) {
+            let verPart = Number.parseInt(semanticVersionSplit[i]);
+            if (Number.isNaN(verPart)) {
+                return -1;
+            }
+
+            // 6 digits?
+            if (verPart > 100000) {
+                return -1;
+            }
+
+            // shift the previous accumulation over 5 digits and add in the new part
+            numVer *= 100000;
+            numVer += verPart;
+        }
+        return numVer;
+    }
+
+    /**
+     * converts a number encoding 3 version parts into a string in the form MM.mm.pp
+     * assumes 5 digits per encoded version part
+     */
+    public static semanticVersionNumberToString(version: number): string {
+        const verPartM = Math.floor(version / (100000 * 100000));
+        version = version - (verPartM * (100000 * 100000));
+        const verPartm = Math.floor(version / 100000);
+        const verPartP = version - (verPartm * 100000);
+        return `${verPartM}.${verPartm}.${verPartP}`;
+    }
+
+    static defaultJsonSchemaSemanticVersionNumber = CdmObjectBase.semanticVersionStringToNumber(CdmObjectBase.jsonSchemaSemanticVersionMinimumSave);
+
+    /**
+     * @internal
+     */
+    getMinimumSemanticVersion(): number {
+        return CdmObjectBase.defaultJsonSchemaSemanticVersionNumber;
+    }
+
 }

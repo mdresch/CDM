@@ -1,7 +1,12 @@
 {
+  "documentVersion": "1.5.1",
   "$schema": "CdmManifest.cdm.json",
   "jsonSchemaSemanticVersion": "1.0.0",
-  "imports": [],
+  "imports": [
+    {
+      "corpusPath": "cdsConcepts.cdm.json"
+    }
+  ],
   "manifestName": "core",
   "explanation": "CDM standard entities",
   "entities": [
@@ -40,8 +45,20 @@
     },
     {
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/CdsStandard",
+      "fromEntityAttribute": "createdBy",
+      "toEntity": "applicationCommon/foundationCommon/crmCommon/projectCommon/User.cdm.json/User",
+      "toEntityAttribute": "systemUserId"
+    },
+    {
+      "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/CdsStandard",
       "fromEntityAttribute": "modifiedBy",
       "toEntity": "applicationCommon/User.cdm.json/User",
+      "toEntityAttribute": "systemUserId"
+    },
+    {
+      "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/CdsStandard",
+      "fromEntityAttribute": "modifiedBy",
+      "toEntity": "applicationCommon/foundationCommon/crmCommon/projectCommon/User.cdm.json/User",
       "toEntityAttribute": "systemUserId"
     },
     {
@@ -60,13 +77,19 @@
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/CdsStandard",
       "fromEntityAttribute": "ownerId",
       "toEntity": "applicationCommon/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/CdsStandard",
       "fromEntityAttribute": "ownerId",
       "toEntity": "applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/CdsStandard",
@@ -78,6 +101,12 @@
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/CdsStandard",
       "fromEntityAttribute": "owningUser",
       "toEntity": "applicationCommon/User.cdm.json/User",
+      "toEntityAttribute": "systemUserId"
+    },
+    {
+      "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/CdsStandard",
+      "fromEntityAttribute": "owningUser",
+      "toEntity": "applicationCommon/foundationCommon/crmCommon/projectCommon/User.cdm.json/User",
       "toEntityAttribute": "systemUserId"
     },
     {
@@ -94,8 +123,20 @@
     },
     {
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivityCommon",
+      "fromEntityAttribute": "createdBy",
+      "toEntity": "applicationCommon/foundationCommon/crmCommon/projectCommon/User.cdm.json/User",
+      "toEntityAttribute": "systemUserId"
+    },
+    {
+      "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivityCommon",
       "fromEntityAttribute": "modifiedBy",
       "toEntity": "applicationCommon/User.cdm.json/User",
+      "toEntityAttribute": "systemUserId"
+    },
+    {
+      "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivityCommon",
+      "fromEntityAttribute": "modifiedBy",
+      "toEntity": "applicationCommon/foundationCommon/crmCommon/projectCommon/User.cdm.json/User",
       "toEntityAttribute": "systemUserId"
     },
     {
@@ -114,13 +155,19 @@
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivityCommon",
       "fromEntityAttribute": "ownerId",
       "toEntity": "applicationCommon/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivityCommon",
       "fromEntityAttribute": "ownerId",
       "toEntity": "applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivityCommon",
@@ -132,6 +179,12 @@
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivityCommon",
       "fromEntityAttribute": "owningUser",
       "toEntity": "applicationCommon/User.cdm.json/User",
+      "toEntityAttribute": "systemUserId"
+    },
+    {
+      "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivityCommon",
+      "fromEntityAttribute": "owningUser",
+      "toEntity": "applicationCommon/foundationCommon/crmCommon/projectCommon/User.cdm.json/User",
       "toEntityAttribute": "systemUserId"
     },
     {
@@ -168,13 +221,19 @@
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivitySystem",
       "fromEntityAttribute": "ownerId",
       "toEntity": "applicationCommon/User.cdm.json/User",
-      "toEntityAttribute": "systemUserId"
+      "toEntityAttribute": "systemUserId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivitySystem",
       "fromEntityAttribute": "ownerId",
       "toEntity": "applicationCommon/Team.cdm.json/Team",
-      "toEntityAttribute": "teamId"
+      "toEntityAttribute": "teamId",
+      "exhibitsTraits": [
+        "is.CDS.owner"
+      ]
     },
     {
       "fromEntity": "wellKnownCDSAttributeGroups.cdm.json/ActivitySystem",

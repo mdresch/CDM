@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
@@ -14,7 +14,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
         public static dynamic ToData(CdmObjectReference instance, ResolveOptions resOpt, CopyOptions options)
         {
             dynamic copy = null;
-            if (!string.IsNullOrEmpty(instance.NamedReference))
+            if (!StringUtils.IsBlankByCdmStandard(instance.NamedReference))
             {
                 dynamic identifier = Utils.CopyIdentifierRef(instance, resOpt, options);
                 if (instance.SimpleNamedReference)
@@ -30,8 +30,15 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
                 if (replace != null)
                     copy = replace;
             }
+
+            if (instance.Optional != null)
+            {
+                copy.Optional = instance.Optional;
+            }
+
             if (instance.AppliedTraits.Count > 0)
                 copy.AppliedTraits = CopyDataUtils.ListCopyData(resOpt, instance.AppliedTraits, options);
+            
             return copy;
         }
 
@@ -53,7 +60,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.CdmFolder
                     copy = new TraitReferenceDefinition();
                     copy.TraitReference = refTo;
                     copy.Arguments = Utils.ListCopyData<dynamic>(resOpt, ((CdmTraitReference)instance).Arguments, options)?.ConvertAll<JToken>(a => JToken.FromObject(a, JsonSerializationUtil.JsonSerializer));
+                    copy.Verb = Utils.JsonForm(((CdmTraitReference)instance).Verb, resOpt, options);
                     return copy;
+                case CdmObjectType.TraitGroupRef:
+                    return new TraitGroupReferenceDefinition { TraitGroupReference = refTo };
             }
 
             return null;

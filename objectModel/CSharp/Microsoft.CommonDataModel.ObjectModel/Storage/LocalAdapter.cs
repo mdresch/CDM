@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Storage
@@ -140,14 +140,27 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
         }
 
         /// <inheritdoc />
-        public override Task<DateTimeOffset?> ComputeLastModifiedTimeAsync(string corpusPath)
+        public override async Task<DateTimeOffset?> ComputeLastModifiedTimeAsync(string corpusPath)
+        {
+            var fileMetadata = await this.FetchFileMetadataAsync(corpusPath);
+
+            if (fileMetadata == null)
+            {
+                return null;
+            }
+
+            return fileMetadata.LastModifiedTime;
+        }
+
+        /// <inheritdoc />
+        public override Task<CdmFileMetadata> FetchFileMetadataAsync(string corpusPath)
         {
             var adapterPath = this.CreateAdapterPath(corpusPath);
             FileInfo fileInfo = new FileInfo(adapterPath);
             if (fileInfo.Exists)
-                return Task.FromResult((DateTimeOffset?)fileInfo.LastWriteTimeUtc);
+                return Task.FromResult(new CdmFileMetadata { FileSizeBytes = fileInfo.Length, LastModifiedTime = (DateTimeOffset?)fileInfo.LastWriteTimeUtc});
             else
-                return Task.FromResult<DateTimeOffset?>(null);
+                return Task.FromResult<CdmFileMetadata>(null);
         }
 
         /// <inheritdoc />
@@ -156,6 +169,25 @@ namespace Microsoft.CommonDataModel.ObjectModel.Storage
             // Returns a list corpus paths to all files and folders at or under the
             // provided corpus path to a folder
             return await this._getAllFiles(folderCorpusPath);
+        }
+
+        /// <inheritdoc />
+        public override async Task<IDictionary<string, CdmFileMetadata>> FetchAllFilesMetadataAsync(string folderCorpusPath)
+        {
+            IDictionary<string, CdmFileMetadata> fileMetadatas = new Dictionary<string, CdmFileMetadata>();
+            List<string> fileNames = await this.FetchAllFilesAsync(folderCorpusPath);
+
+            foreach (var fileName in fileNames)
+            {
+                string path = this.CreateAdapterPath(fileName);
+                FileInfo fi = new FileInfo(path);
+                if (fi.Exists)
+                {
+                    fileMetadatas.Add(fileName, new CdmFileMetadata { FileSizeBytes = fi.Length });
+                }
+            }
+
+            return fileMetadatas;
         }
 
         /// <summary>

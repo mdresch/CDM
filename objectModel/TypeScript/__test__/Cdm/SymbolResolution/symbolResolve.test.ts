@@ -20,13 +20,13 @@ describe('Cdm/SymbolResolution/SymbolResolve', () => {
     /**
      * Test that symbols are set correctly and that object can be correctly fetched using the symbols
      */
-    it('TestSymbolResolution', async (done) => {
+    it('TestSymbolResolution', async () => {
         const corpus: CdmCorpusDefinition = testHelper.getLocalCorpus(testsSubpath, 'TestSymbolResolution');
 
         // load the file
         const resOpt: resolveOptions = new resolveOptions();
         resOpt.importsLoadStrategy = importsLoadStrategy.load;
-        const ent: CdmEntityDefinition = await corpus.fetchObjectAsync('local:/symbolEntity.cdm.json/symbolEnt', null, resOpt);
+        const ent: CdmEntityDefinition = await corpus.fetchObjectAsync('local:/symbolEntity.cdm.json/symbolEnt', undefined, resOpt);
         resOpt.wrtDoc = ent.inDocument;
 
         // resolve a reference to the trait object
@@ -101,7 +101,5 @@ describe('Cdm/SymbolResolution/SymbolResolve', () => {
 
         expect(isTypeAttributeDefinition(typeAtt))
             .toBeTruthy();
-
-        done();
     });
 });

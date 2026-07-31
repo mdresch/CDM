@@ -10,12 +10,16 @@ import {
     CdmImport,
     CdmManifestDefinition,
     cdmObjectType,
-    CdmTraitReference,
+    cdmLogCode,
     copyOptions,
-    resolveOptions
+    resolveOptions,
+    CdmTraitReferenceBase,
+    Logger,
+    StringUtils,
+    isLocalEntityDeclarationDefinition,
+    constants
 } from '../../internal';
 import * as copyDataUtils from '../../Utilities/CopyDataUtils';
-import { Logger } from '../../Utilities/Logging/Logger';
 import * as timeUtils from '../../Utilities/timeUtils';
 import { AttributeGroupPersistence } from './AttributeGroupPersistence';
 import { ConstantEntityPersistence } from './ConstantEntityPersistence';
@@ -34,11 +38,14 @@ import {
     entityDeclarationDefinitionType,
     ManifestContent,
     ManifestDeclaration,
+    TraitGroupReference,
     TraitReference
 } from './types';
 import * as utils from './utils';
 
 export class ManifestPersistence {
+    private static TAG: string = ManifestPersistence.name;
+
     // Whether this persistence class has async methods.
     public static readonly isPersistenceAsync: boolean = false;
 
@@ -55,7 +62,7 @@ export class ManifestPersistence {
         // Determine name of the manifest
         let manifestName: string;
         if (dataObj) {
-            manifestName = dataObj.manifestName ? dataObj.manifestName : dataObj.folioName;
+            manifestName = !StringUtils.isBlankByCdmStandard(dataObj.manifestName) ? dataObj.manifestName : dataObj.folioName;
         }
         // We haven't found the name in the file, use one provided in the call but without the suffixes
         if (!manifestName && name) {
@@ -72,14 +79,14 @@ export class ManifestPersistence {
             if (dataObj.explanation) {
                 manifest.explanation = dataObj.explanation;
             }
-            if (dataObj.$schema) {
+            if (!StringUtils.isBlankByCdmStandard(dataObj.$schema)) {
                 manifest.schema = dataObj.$schema;
             }
             // support old model syntax
-            if (dataObj.schemaVersion) {
+            if (!StringUtils.isBlankByCdmStandard(dataObj.schemaVersion)) {
                 manifest.jsonSchemaSemanticVersion = dataObj.schemaVersion;
             }
-            if (dataObj.jsonSchemaSemanticVersion) {
+            if (!StringUtils.isBlankByCdmStandard(dataObj.jsonSchemaSemanticVersion)) {
                 manifest.jsonSchemaSemanticVersion = dataObj.jsonSchemaSemanticVersion;
             }
             if (manifest.jsonSchemaSemanticVersion !== '1.0.0') {
@@ -87,14 +94,14 @@ export class ManifestPersistence {
                 // TODO: validate that this is a version we can understand with the OM
             }
 
-            if (dataObj.documentVersion) {
+            if (!StringUtils.isBlankByCdmStandard(dataObj.documentVersion)) {
                 manifest.documentVersion = dataObj.documentVersion;
             }
 
-            if (dataObj.manifestName) {
+            if (!StringUtils.isBlankByCdmStandard(dataObj.manifestName)) {
                 manifest.manifestName = dataObj.manifestName;
                 // Might be populated in the case of folio.cdm.json or manifest.cdm.json file.
-            } else if (dataObj.folioName) {
+            } else if (!StringUtils.isBlankByCdmStandard(dataObj.folioName)) {
                 manifest.manifestName = dataObj.folioName;
             }
 
@@ -133,15 +140,13 @@ export class ManifestPersistence {
                 manifest.lastChildFileModifiedTime = new Date(dataObj.lastChildFileModifiedTime);
             }
 
-            if (dataObj.exhibitsTraits) {
-                utils.addArrayToCdmCollection<CdmTraitReference>(
+            utils.addArrayToCdmCollection<CdmTraitReferenceBase>(
                     manifest.exhibitsTraits,
                     utils.createTraitReferenceArray(ctx, dataObj.exhibitsTraits)
-                );
-            }
+            );
 
             if (dataObj.entities) {
-                const fullPath: string = `${namespace ? `${namespace}:${path}` : path}`;
+                const fullPath: string = `${!StringUtils.isBlankByCdmStandard(namespace) ? `${namespace}:${path}` : path}`;
                 for (const entityObj of dataObj.entities) {
                     let entity: CdmEntityDeclarationDefinition;
                     if (entityObj.type) {
@@ -150,12 +155,7 @@ export class ManifestPersistence {
                         } else if (entityObj.type === entityDeclarationDefinitionType.referencedEntity) {
                             entity = ReferencedEntityDeclarationPersistence.fromData(ctx, fullPath, entityObj);
                         } else {
-                            Logger.error(
-                                ManifestPersistence.name,
-                                ctx,
-                                'Couldn\'t find the type for entity declaration',
-                                this.fromData.name
-                            );
+                            Logger.error(ctx, this.TAG, this.fromObject.name, undefined, cdmLogCode.ErrPersistEntityDeclarationMissing, entityObj.entityName);
                         }
                     } else {
                         // We see old structure of entity declaration, check for entity schema/declaration.
@@ -169,6 +169,8 @@ export class ManifestPersistence {
                     }
                     manifest.entities.push(entity);
                 }
+                // Checks if incremental trait is needed from foundations.cdm.json
+                this.importFoundationsIfIncrementalPartitionTraitExist(manifest);
             }
 
             if (dataObj.relationships) {
@@ -199,6 +201,9 @@ export class ManifestPersistence {
     }
 
     public static toData(instance: CdmManifestDefinition, resOpt: resolveOptions, options: copyOptions): ManifestContent {
+        // Checks if incremental trait is needed from foundations.cdm.json
+        this.importFoundationsIfIncrementalPartitionTraitExist(instance);
+
         const manifestContent: ManifestContent = DocumentPersistence.toData(instance, resOpt, options) as ManifestContent;
 
         manifestContent.manifestName = instance.manifestName;
@@ -207,7 +212,7 @@ export class ManifestPersistence {
         manifestContent.lastChildFileModifiedTime = timeUtils.getFormattedDateString(instance.lastChildFileModifiedTime);
         manifestContent.documentVersion = instance.documentVersion;
         manifestContent.explanation = instance.explanation;
-        manifestContent.exhibitsTraits = copyDataUtils.arrayCopyData<TraitReference>(
+        manifestContent.exhibitsTraits = copyDataUtils.arrayCopyData<string | TraitReference | TraitGroupReference>(
             resOpt,
             instance.exhibitsTraits.allItems,
             options);
@@ -228,10 +233,32 @@ export class ManifestPersistence {
 
         if (instance.relationships && instance.relationships.length > 0) {
             manifestContent.relationships = instance.relationships.allItems.map((relationship: CdmE2ERelationship) => {
-                return E2ERelationshipPersistence.toData(relationship);
+                return E2ERelationshipPersistence.toData(relationship, resOpt, options);
             });
         }
 
         return manifestContent;
+    }
+
+    /**
+     * 
+     * Checks if incremental trait is needed from foundations.cdm.json
+     */
+    private static importFoundationsIfIncrementalPartitionTraitExist(manifest:CdmManifestDefinition): void {
+        if (manifest.entities == null) {
+            return;
+        }
+
+        for (const ent of manifest.entities){
+            if (isLocalEntityDeclarationDefinition(ent)) {
+                if (ent.incrementalPartitions?.length> 0 || ent.incrementalPartitionPatterns?.length > 0) {
+                    if (manifest.imports.item(constants.FOUNDATIONS_CORPUS_PATH, undefined, false) === undefined) {
+                        manifest.imports.push(constants.FOUNDATIONS_CORPUS_PATH);
+                        // Find one is enough
+                        break;
+                    }
+                }
+            }
+        }
     }
 }

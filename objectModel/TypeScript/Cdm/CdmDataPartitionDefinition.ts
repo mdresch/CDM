@@ -3,15 +3,19 @@
 
 import {
     CdmCorpusContext,
+    CdmFileMetadata,
     CdmFileStatus,
     CdmObject,
     CdmObjectDefinitionBase,
     cdmObjectType,
+    fileStatusCheckOptions,
     resolveOptions,
     traitToPropertyMap,
     VisitCallback
 } from '../internal';
 import * as timeUtils from '../Utilities/timeUtils';
+import { using } from "using-statement";
+import { enterScope } from '../Utilities/Logging/Logger';
 
 /**
  *  The object model implementation for Data Partition.
@@ -99,6 +103,13 @@ export class CdmDataPartitionDefinition extends CdmObjectDefinitionBase implemen
     }
 
     /**
+     * Gets whether the data partition is incremental.
+     */
+    public get isIncremental(): boolean {
+        return this.traitToPropertyMap.fetchPropertyValue('isIncremental') as boolean;
+    }
+
+    /**
      * @inheritdoc
      */
     public getObjectType(): cdmObjectType {
@@ -125,7 +136,6 @@ export class CdmDataPartitionDefinition extends CdmObjectDefinitionBase implemen
             copy = new CdmDataPartitionDefinition(this.ctx, this.name);
         } else {
             copy = host as CdmDataPartitionDefinition;
-            copy.ctx = this.ctx;
             copy.name = this.name;
         }
 
@@ -134,7 +144,13 @@ export class CdmDataPartitionDefinition extends CdmObjectDefinitionBase implemen
         copy.lastFileStatusCheckTime = this.lastFileStatusCheckTime;
         copy.lastFileModifiedTime = this.lastFileModifiedTime;
         copy.inferred = this.inferred;
-        copy.arguments = this.arguments;
+        if (this.arguments) {
+            // deep copy the content
+            copy.arguments = new Map();
+            for (const key of this.arguments.keys()) {
+                copy.arguments.set(key, this.arguments.get(key).slice());
+            }
+        }
         copy.specializedSchema = this.specializedSchema;
         this.copyDef(resOpt, copy);
 
@@ -152,14 +168,7 @@ export class CdmDataPartitionDefinition extends CdmObjectDefinitionBase implemen
      * @inheritdoc
      */
     public visit(pathFrom: string, preChildren: VisitCallback, postChildren: VisitCallback): boolean {
-        let path: string = '';
-        if (this.ctx.corpus.blockDeclaredPathChanges === false) {
-            path = this.declaredPath;
-            if (!path) {
-                path = pathFrom + (this.getName() || 'UNNAMED');
-                this.declaredPath = path;
-            }
-        }
+        const path: string = this.fetchDeclaredPath(pathFrom);
 
         if (preChildren && preChildren(this, path)) {
             return false;
@@ -170,10 +179,17 @@ export class CdmDataPartitionDefinition extends CdmObjectDefinitionBase implemen
         }
 
         if (postChildren && postChildren(this, path)) {
-            return false;
+            return true;
         }
 
         return false;
+    }
+
+    /**
+     * @internal
+     */
+    public fetchDeclaredPath(pathFrom: string): string {
+        return pathFrom + (this.getName() || 'UNNAMED');
     }
 
     /**
@@ -186,23 +202,28 @@ export class CdmDataPartitionDefinition extends CdmObjectDefinitionBase implemen
     /**
      * @inheritdoc
      */
-    public async fileStatusCheckAsync(): Promise<void> {
-        const fullPath: string = this.ctx.corpus.storage.createAbsoluteCorpusPath(this.location, this.inDocument);
+    public async fileStatusCheckAsync(fileStatusCheckOptions?: fileStatusCheckOptions): Promise<void> {
+        return await using(enterScope(CdmDataPartitionDefinition.name, this.ctx, this.fileStatusCheckAsync.name), async _ => {
+            const fullPath: string = this.ctx.corpus.storage.createAbsoluteCorpusPath(this.location, this.inDocument);
+            const partitionMetadata: CdmFileMetadata = await this.ctx.corpus.getFileMetadataFromPartitionPathAsync(fullPath);
 
-        const modifiedTime: Date = await this.ctx.corpus.getLastModifiedTimeFromPartitionPath(fullPath);
+            // update modified times
+            this.lastFileStatusCheckTime = new Date();
+            this.lastFileModifiedTime = (partitionMetadata?.lastModifiedTime !== undefined) ? timeUtils.maxTime(partitionMetadata.lastModifiedTime, this.lastFileModifiedTime)
+                : this.lastFileModifiedTime;
+            if (fileStatusCheckOptions?.includeDataPartitionSize == true && partitionMetadata?.fileSizeBytes != undefined) {
+                this.exhibitsTraits.push('is.partition.size', [['value', partitionMetadata.fileSizeBytes]]);
+            }
 
-        // update modified times
-        this.lastFileStatusCheckTime = new Date();
-        this.lastFileModifiedTime = (modifiedTime !== undefined) ? timeUtils.maxTime(modifiedTime, this.lastFileModifiedTime)
-            : this.lastFileModifiedTime;
-        await this.reportMostRecentTimeAsync(this.lastFileModifiedTime);
+            await this.reportMostRecentTimeAsync(this.lastFileModifiedTime);
+        });
     }
 
     /**
      * @inheritdoc
      */
     public async reportMostRecentTimeAsync(childTime: Date): Promise<void> {
-        if ((this.owner as CdmFileStatus).reportMostRecentTimeAsync && childTime) {
+        if (this.owner && (this.owner as CdmFileStatus).reportMostRecentTimeAsync && childTime) {
             await (this.owner as CdmFileStatus).reportMostRecentTimeAsync(childTime);
         }
     }

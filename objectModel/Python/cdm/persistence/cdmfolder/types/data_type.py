@@ -1,10 +1,12 @@
 ﻿# Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License. See License.txt in the project root for license information.
 
-from typing import Union, List
+from typing import Union, List, TYPE_CHECKING
 
-from .data_type_reference import DataTypeReference
-from .trait_reference import TraitReference
+if TYPE_CHECKING:
+    from cdm.objectmodel import CdmDataTypeReference
+    from cdm.persistence.cdmfolder.types import DataTypeReference, TraitGroupReference, TraitReference
+
 from cdm.utilities import JObject
 
 
@@ -14,5 +16,5 @@ class DataType(JObject):
 
         self.explanation = None  # type: str
         self.dataTypeName = None  # type: str
-        self.extendsDataType = None  # type: Union[str, DataTypeReference]
-        self.exhibitsTraits = None  # type: List[Union[str, TraitReference]]
+        self.extendsDataType = None  # type: Union[str, 'DataTypeReference']
+        self.exhibitsTraits = None  # type: List[Union[str, 'TraitReference', 'TraitGroupReference']]

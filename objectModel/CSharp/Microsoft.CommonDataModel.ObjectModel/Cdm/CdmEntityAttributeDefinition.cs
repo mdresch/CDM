@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Cdm
@@ -13,10 +13,20 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 
     public class CdmEntityAttributeDefinition : CdmAttribute
     {
+        private static readonly string Tag = nameof(CdmEntityAttributeDefinition);
         /// <summary>
         /// Gets or sets the entity attribute's entity reference.
         /// </summary>
-        public CdmEntityReference Entity { get; set; }
+        public CdmEntityReference Entity
+        {
+            get => this.entity;
+            set
+            {
+                if (value != null)
+                    value.Owner = this;
+                this.entity = value;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the entity attribute's display name.
@@ -55,6 +65,8 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// This property of the entity attribute allows us to do that.
         /// </summary>
         public bool? IsPolymorphicSource { get; set; }
+
+        private CdmEntityReference entity;
 
         /// <summary>
         /// Constructs a CdmEntityAttributeDefinition.
@@ -112,7 +124,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             else
             {
                 copy = host as CdmEntityAttributeDefinition;
-                copy.Ctx = this.Ctx;
                 copy.Name = this.Name;
             }
 
@@ -139,19 +150,19 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             }
             if (missingFields.Count > 0)
             {
-                Logger.Error(nameof(CdmEntityAttributeDefinition), this.Ctx, Errors.ValidateErrorString(this.AtCorpusPath, missingFields), nameof(Validate));
+                Logger.Error(this.Ctx, Tag, nameof(Validate), this.AtCorpusPath, CdmLogCode.ErrValdnIntegrityCheckFailure, this.AtCorpusPath, string.Join(", ", missingFields.Select((s) => $"'{s}'")));
                 return false;
             }
             if (Cardinality != null)
             {
                 if (!CardinalitySettings.IsMinimumValid(Cardinality.Minimum))
                 {
-                    Logger.Error(nameof(CdmEntityAttributeDefinition), this.Ctx, $"Invalid minimum cardinality {Cardinality.Minimum}.", nameof(Validate));
+                    Logger.Error(this.Ctx, Tag, nameof(Validate), this.AtCorpusPath, CdmLogCode.ErrValdnInvalidMinCardinality, Cardinality.Minimum);
                     return false;
                 }
                 if (!CardinalitySettings.IsMaximumValid(Cardinality.Maximum))
                 {
-                    Logger.Error(nameof(CdmEntityAttributeDefinition), this.Ctx, $"Invalid maximum cardinality {Cardinality.Maximum}.", nameof(Validate));
+                    Logger.Error(this.Ctx, Tag, nameof(Validate), this.AtCorpusPath, CdmLogCode.ErrValdnInvalidMaxCardinality, Cardinality.Maximum);
                     return false;
                 }
             }
@@ -166,22 +177,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 return false;
             }
 
-            string path = string.Empty;
-            if (this.Ctx.Corpus.blockDeclaredPathChanges == false)
-            {
-                path = this.DeclaredPath;
-                if (string.IsNullOrEmpty(path))
-                {
-                    path = pathFrom + this.Name;
-                    this.DeclaredPath = path;
-                }
-            }
+            string path = this.UpdateDeclaredPath(pathFrom);
             //trackVisits(path);
 
             if (preChildren != null && preChildren.Invoke(this, path))
                 return false;
 
-            if (this.Entity != null) this.Entity.Owner = this;
             if (this.Entity.Visit(path + "/entity/", preChildren, postChildren))
                 return true;
             if (this.VisitAtt(path, preChildren, postChildren))
@@ -202,82 +203,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 
             // this context object holds all of the info about what needs to happen to resolve these attributes.
             // make a copy and add defaults if missing
-            CdmAttributeResolutionGuidance resGuideWithDefault;
-            if (this.ResolutionGuidance != null)
-                resGuideWithDefault = (CdmAttributeResolutionGuidance)this.ResolutionGuidance.Copy(resOpt);
-            else
-                resGuideWithDefault = new CdmAttributeResolutionGuidance(this.Ctx);
+            CdmAttributeResolutionGuidance resGuideWithDefault = this.ResolutionGuidance == null
+                ? new CdmAttributeResolutionGuidance(this.Ctx) : this.ResolutionGuidance?.Copy(resOpt) as CdmAttributeResolutionGuidance;
+
             resGuideWithDefault.UpdateAttributeDefaults(this.Name, this);
 
             return new AttributeResolutionContext(resOpt, resGuideWithDefault, rtsThisAtt);
-        }
-
-        private RelationshipInfo GetRelationshipInfo(ResolveOptions resOpt, AttributeResolutionContext arc)
-        {
-            ResolvedTraitSet rts = null;
-            bool noMaxDepth = false;
-            bool hasRef = false;
-            bool isByRef = false;
-            bool isArray = false;
-            bool selectsOne = false;
-            int? nextDepth = null;
-            int? maxDepth = null;
-            bool maxDepthExceeded = false;
-
-            if (arc != null && arc.ResGuide != null)
-            {
-                if (arc.ResGuide.entityByReference != null && arc.ResGuide.entityByReference.allowReference == true)
-                    hasRef = true;
-                if (arc.ResOpt.Directives != null)
-                {
-                    noMaxDepth = arc.ResOpt.Directives.Has("noMaxDepth");
-                    // based on directives
-                    if (hasRef)
-                        isByRef = arc.ResOpt.Directives.Has("referenceOnly");
-                    selectsOne = arc.ResOpt.Directives.Has("selectOne");
-                    isArray = arc.ResOpt.Directives.Has("isArray");
-                }
-                // figure out the depth for the next level
-                int? oldDepth = resOpt.DepthInfo?.CurrentDepth;
-                nextDepth = oldDepth;
-                // if this is a 'selectone', then skip counting this entity in the depth, else count it
-                if (!selectsOne)
-                {
-                    // if already a ref, who cares?
-                    if (!isByRef)
-                    {
-                        if (nextDepth == null)
-                            nextDepth = 1;
-                        else
-                            nextDepth++;
-
-                        // max comes from settings but may not be set
-                        maxDepth = DepthInfo.DefaultMaxDepth;
-                        if (hasRef && arc.ResGuide.entityByReference.referenceOnlyAfterDepth != null)
-                            maxDepth = (int)arc.ResGuide.entityByReference.referenceOnlyAfterDepth;
-                        if (noMaxDepth)
-                            maxDepth = DepthInfo.MaxDepthLimit; // no max? really? what if we loop forever? if you need more than 32 nested entities, then you should buy a different metadata description system.
-
-                        if (nextDepth > maxDepth)
-                        {
-                            // don't do it
-                            isByRef = true;
-                            maxDepthExceeded = true;
-                        }
-                    }
-                }
-            }
-
-            return new RelationshipInfo
-            {
-                Rts = rts,
-                IsByRef = isByRef,
-                IsArray = isArray,
-                SelectsOne = selectsOne,
-                NextDepth = nextDepth,
-                MaxDepth = maxDepth,
-                MaxDepthExceeded = maxDepthExceeded
-            };
         }
 
         internal override void ConstructResolvedTraits(ResolvedTraitSetBuilder rtsb, ResolveOptions resOpt)
@@ -290,27 +221,24 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             //rtsb.CleanUp();
         }
 
-        internal override ResolvedAttributeSetBuilder FetchObjectFromCache(ResolveOptions resOpt, AttributeContextParameters acpInContext = null)
+        internal override ResolvedAttributeSetBuilder FetchObjectFromCache(ResolveOptions resOpt, AttributeContextParameters acpInContext)
         {
             const string kind = "rasb";
             ResolveContext ctx = this.Ctx as ResolveContext;
 
-            // check cache at the correct depth for entity attributes
-            RelationshipInfo relInfo = this.GetRelationshipInfo(resOpt, this.FetchAttResContext(resOpt));
-            if (relInfo.MaxDepthExceeded)
-            {
-                resOpt.DepthInfo = new DepthInfo
-                {
-                    CurrentDepth = (int)relInfo.NextDepth,
-                    MaxDepth = relInfo.MaxDepth,
-                    MaxDepthExceeded = relInfo.MaxDepthExceeded
-                };
-            }
+            // once resolution guidance is fully deprecated, this line can be removed
+            AttributeResolutionContext arc = !this.Entity.IsProjection ? this.FetchAttResContext(resOpt) : null;
+
+            // update the depth info and check cache at the correct depth for entity attributes
+            resOpt.DepthInfo.UpdateToNextLevel(resOpt, this.IsPolymorphicSource, arc);
+
             string cacheTag = ctx.Corpus.CreateDefinitionCacheTag(resOpt, this, kind, acpInContext != null ? "ctx" : "");
 
-            dynamic rasbCache = null;
+            ResolvedAttributeSetBuilder rasbCache = null;
             if (cacheTag != null)
-                ctx.Cache.TryGetValue(cacheTag, out rasbCache);
+            {
+                ctx.AttributeCache.TryGetValue(cacheTag, out rasbCache);
+            }
             return rasbCache;
         }
 
@@ -321,240 +249,235 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             // the entity used as an attribute, traits applied to that entity,
             // the purpose of the attribute, any traits applied to the attribute.
             ResolvedAttributeSetBuilder rasb = new ResolvedAttributeSetBuilder();
-            CdmEntityReference ctxEnt = this.Entity;
             CdmAttributeContext underAtt = under;
             AttributeContextParameters acpEnt = null;
 
-            var ctxEntObjDef = ctxEnt.FetchObjectDefinition<CdmObjectDefinition>(resOpt);
-            if (ctxEntObjDef?.ObjectType == CdmObjectType.ProjectionDef)
+            if (!resOpt.InCircularReference)
             {
-                // A Projection
-
-                ProjectionDirective projDirective = new ProjectionDirective(resOpt, this, ownerRef: ctxEnt);
-                CdmProjection projDef = (CdmProjection)ctxEntObjDef;
-                ProjectionContext projCtx = projDef.ConstructProjectionContext(projDirective, under);
-
-                ResolvedAttributeSet ras = projDef.ExtractResolvedAttributes(projCtx, underAtt);
-                rasb.ResolvedAttributeSet = ras;
-            }
-            else if (!resOpt.InCircularReference)
-            {
-                // An Entity Reference
-
-                if (underAtt != null)
+                if (this.Entity?.IsProjection == true)
                 {
-                    // make a context for this attreibute that holds the attributes that come up from the entity
-                    acpEnt = new AttributeContextParameters
-                    {
-                        under = underAtt,
-                        type = CdmAttributeContextType.Entity,
-                        Name = ctxEnt.FetchObjectDefinitionName(),
-                        Regarding = ctxEnt,
-                        IncludeTraits = true
-                    };
-                }
+                    // A Projection
 
-                AttributeResolutionContext arc = this.FetchAttResContext(resOpt);
-
-                // complete cheating but is faster.
-                // this purpose will remove all of the attributes that get collected here, so dumb and slow to go get them
-                RelationshipInfo relInfo = this.GetRelationshipInfo(arc.ResOpt, arc);
-                if (relInfo.NextDepth != null)
-                {
-                    resOpt.DepthInfo = new DepthInfo
+                    // if the max depth is exceeded it should not try to execute the projection
+                    if (resOpt.DepthInfo.MaxDepthExceeded)
                     {
-                        MaxDepth = relInfo.MaxDepth,
-                        CurrentDepth = (int)relInfo.NextDepth,
-                        MaxDepthExceeded = relInfo.MaxDepthExceeded
-                    };
-                }
-
-                if (relInfo.IsByRef)
-                {
-                    // make the entity context that a real recursion would have give us
-                    if (under != null)
-                        under = rasb.ResolvedAttributeSet.CreateAttributeContext(resOpt, acpEnt);
-                    // if selecting from one of many attributes, then make a context for each one
-                    if (under != null && relInfo.SelectsOne)
-                    {
-                        // the right way to do this is to get a resolved entity from the embedded entity and then 
-                        // look through the attribute context hierarchy for non-nested entityReferenceAsAttribute nodes
-                        // that seems like a disaster waiting to happen given endless looping, etc.
-                        // for now, just insist that only the top level entity attributes declared in the ref entity will work
-                        CdmEntityDefinition entPickFrom = (this.Entity as CdmEntityReference).FetchObjectDefinition<CdmEntityDefinition>(resOpt) as CdmEntityDefinition;
-                        CdmCollection<CdmAttributeItem> attsPick = entPickFrom?.Attributes;
-                        if (entPickFrom != null && attsPick != null)
-                        {
-                            for (int i = 0; i < attsPick.Count; i++)
-                            {
-                                if (attsPick.AllItems[i].ObjectType == CdmObjectType.EntityAttributeDef)
-                                {
-                                    // a table within a table. as expected with a selectsOne attribute
-                                    // since this is by ref, we won't get the atts from the table, but we do need the traits that hold the key
-                                    // these are the same contexts that would get created if we recursed
-                                    // first this attribute
-                                    AttributeContextParameters acpEntAtt = new AttributeContextParameters
-                                    {
-                                        under = under,
-                                        type = CdmAttributeContextType.AttributeDefinition,
-                                        Name = attsPick.AllItems[i].FetchObjectDefinitionName(),
-                                        Regarding = attsPick.AllItems[i],
-                                        IncludeTraits = true
-                                    };
-                                    CdmAttributeContext pickUnder = rasb.ResolvedAttributeSet.CreateAttributeContext(resOpt, acpEntAtt);
-                                    CdmEntityReference pickEnt = (attsPick.AllItems[i] as CdmEntityAttributeDefinition).Entity as CdmEntityReference;
-                                    CdmAttributeContextType pickEntType = (pickEnt.FetchObjectDefinition<CdmObjectDefinition>(resOpt).ObjectType == CdmObjectType.ProjectionDef) ?
-                                        CdmAttributeContextType.Projection :
-                                        CdmAttributeContextType.Entity;
-                                    AttributeContextParameters acpEntAttEnt = new AttributeContextParameters
-                                    {
-                                        under = pickUnder,
-                                        type = pickEntType,
-                                        Name = pickEnt.FetchObjectDefinitionName(),
-                                        Regarding = pickEnt,
-                                        IncludeTraits = true
-                                    };
-                                    rasb.ResolvedAttributeSet.CreateAttributeContext(resOpt, acpEntAttEnt);
-                                }
-                            }
-                        }
+                        Logger.Warning(this.Ctx, Tag, nameof(ConstructResolvedAttributes), this.AtCorpusPath, CdmLogCode.WarnMaxDepthExceeded, resOpt.DepthInfo.MaxDepth?.ToString(), this.Entity.FetchObjectDefinitionName());
                     }
-
-                    // if we got here because of the max depth, need to impose the directives to make the trait work as expected
-                    if (relInfo.MaxDepthExceeded)
+                    else
                     {
-                        if (arc.ResOpt.Directives == null)
-                            arc.ResOpt.Directives = new AttributeResolutionDirectiveSet();
-                        arc.ResOpt.Directives.Add("referenceOnly");
+                        CdmProjection projDef = this.Entity.FetchObjectDefinition<CdmProjection>(resOpt);
+                        ProjectionDirective projDirective = new ProjectionDirective(resOpt, this, ownerRef: this.Entity);
+
+                        ProjectionContext projCtx = projDef.ConstructProjectionContext(projDirective, under);
+                        rasb.ResolvedAttributeSet = projDef.ExtractResolvedAttributes(projCtx, under);
+                        // from the traits of purpose and applied here
+                        rasb.ResolvedAttributeSet.ApplyTraits(this.FetchResolvedTraits(resOpt));
                     }
                 }
                 else
                 {
-                    ResolveOptions resLink = resOpt.Copy();
-                    resLink.SymbolRefSet = resOpt.SymbolRefSet;
-                    rasb.MergeAttributes(this.Entity.FetchResolvedAttributes(resLink, acpEnt));
+                    // Resolution guidance
 
-                    // need to pass up maxDepthExceeded if it was hit
-                    if (resLink.DepthInfo != null && resLink.DepthInfo.MaxDepthExceeded)
+                    resOpt.UsedResolutionGuidance = true;
+
+                    AttributeResolutionContext arc = this.FetchAttResContext(resOpt);
+                    RelationshipInfo relInfo = arc.GetRelationshipInfo();
+
+                    if (underAtt != null)
                     {
-                        resOpt.DepthInfo = new DepthInfo
+                        // make a context for this attreibute that holds the attributes that come up from the entity
+                        acpEnt = new AttributeContextParameters
                         {
-                            CurrentDepth = resLink.DepthInfo.CurrentDepth,
-                            MaxDepthExceeded = resLink.DepthInfo.MaxDepthExceeded,
-                            MaxDepth = resLink.DepthInfo.MaxDepth
+                            under = underAtt,
+                            type = CdmAttributeContextType.Entity,
+                            Name = this.Entity.FetchObjectDefinitionName(),
+                            Regarding = this.Entity,
+                            IncludeTraits = true
                         };
                     }
-                }
 
-                // from the traits of purpose and applied here, see if new attributes get generated
-                rasb.ResolvedAttributeSet.AttributeContext = underAtt;
-                rasb.ApplyTraits(arc);
-                rasb.GenerateApplierAttributes(arc, true); // true = apply the prepared traits to new atts
-                                                           // this may have added symbols to the dependencies, so merge them
-                resOpt.SymbolRefSet.Merge(arc.ResOpt.SymbolRefSet);
-
-                // use the traits for linked entity identifiers to record the actual foreign key links
-                if (rasb.ResolvedAttributeSet?.Set != null && relInfo.IsByRef)
-                {
-                    foreach (var att in rasb.ResolvedAttributeSet.Set)
+                    if (relInfo.IsByRef)
                     {
-                        if (att.ResolvedTraits != null)
+                        // make the entity context that a real recursion would have give us
+                        if (under != null)
+                            under = rasb.ResolvedAttributeSet.CreateAttributeContext(resOpt, acpEnt);
+                        // if selecting from one of many attributes, then make a context for each one
+                        if (under != null && relInfo.SelectsOne)
                         {
-                            var reqdTrait = att.ResolvedTraits.Find(resOpt, "is.linkedEntity.identifier");
-                            if (reqdTrait == null)
+                            // the right way to do this is to get a resolved entity from the embedded entity and then 
+                            // look through the attribute context hierarchy for non-nested entityReferenceAsAttribute nodes
+                            // that seems like a disaster waiting to happen given endless looping, etc.
+                            // for now, just insist that only the top level entity attributes declared in the ref entity will work
+                            CdmEntityDefinition entPickFrom = this.Entity.FetchObjectDefinition<CdmEntityDefinition>(resOpt);
+                            CdmCollection<CdmAttributeItem> attsPick = entPickFrom?.Attributes;
+                            if (entPickFrom != null && attsPick != null)
                             {
-                                continue;
-                            }
-
-                            if (reqdTrait.ParameterValues == null || reqdTrait.ParameterValues.Length == 0)
-                            {
-                                Logger.Warning(nameof(CdmEntityAttributeDefinition), this.Ctx as ResolveContext, "is.linkedEntity.identifier does not support arguments");
-                                continue;
-                            }
-
-                            var entReferences = new List<string>();
-                            var attReferences = new List<string>();
-                            Action<CdmEntityReference, string> addEntityReference = (CdmEntityReference entRef, string nameSpace) =>
-                            {
-                                var entDef = entRef.FetchObjectDefinition<CdmEntityDefinition>(resOpt);
-                                if (entDef != null)
+                                for (int i = 0; i < attsPick.Count; i++)
                                 {
-                                    var otherResTraits = entRef.FetchResolvedTraits(resOpt);
-                                    ResolvedTrait identifyingTrait;
-                                    if (otherResTraits != null && (identifyingTrait = otherResTraits.Find(resOpt, "is.identifiedBy")) != null)
+                                    if (attsPick[i].ObjectType == CdmObjectType.EntityAttributeDef)
                                     {
-                                        var attRef = identifyingTrait.ParameterValues.FetchParameterValueByName("attribute").Value;
-                                        string attNamePath = ((CdmObjectReferenceBase)attRef).NamedReference;
-                                        string attName = attNamePath.Split('/').Last();                                // path should be absolute and without a namespace
-                                        string relativeEntPath = Ctx.Corpus.Storage.CreateAbsoluteCorpusPath(entDef.AtCorpusPath, entDef.InDocument);
-                                        if (relativeEntPath.StartsWith($"{nameSpace}:"))
+                                        // a table within a table. as expected with a selectsOne attribute
+                                        // since this is by ref, we won't get the atts from the table, but we do need the traits that hold the key
+                                        // these are the same contexts that would get created if we recursed
+                                        // first this attribute
+                                        AttributeContextParameters acpEntAtt = new AttributeContextParameters
                                         {
-                                            relativeEntPath = relativeEntPath.Substring(nameSpace.Length + 1);
-                                        }
-                                        entReferences.Add(relativeEntPath);
-                                        attReferences.Add(attName);
-                                    }
-                                }
-                            };
-                            if (relInfo.SelectsOne)
-                            {
-                                var entPickFrom = (this.Entity as CdmEntityReference).FetchObjectDefinition<CdmEntityDefinition>(resOpt) as CdmEntityDefinition;
-                                var attsPick = entPickFrom?.Attributes.Cast<CdmObject>().ToList();
-                                if (entPickFrom != null && attsPick != null)
-                                {
-                                    for (int i = 0; i < attsPick.Count; i++)
-                                    {
-                                        if (attsPick[i].ObjectType == CdmObjectType.EntityAttributeDef)
+                                            under = under,
+                                            type = CdmAttributeContextType.AttributeDefinition,
+                                            Name = attsPick[i].FetchObjectDefinitionName(),
+                                            Regarding = attsPick[i],
+                                            IncludeTraits = true
+                                        };
+                                        CdmAttributeContext pickUnder = rasb.ResolvedAttributeSet.CreateAttributeContext(resOpt, acpEntAtt);
+                                        CdmEntityReference pickEnt = (attsPick[i] as CdmEntityAttributeDefinition).Entity;
+                                        CdmAttributeContextType pickEntType = (pickEnt.FetchObjectDefinition<CdmObjectDefinition>(resOpt).ObjectType == CdmObjectType.ProjectionDef) ?
+                                            CdmAttributeContextType.Projection :
+                                            CdmAttributeContextType.Entity;
+                                        AttributeContextParameters acpEntAttEnt = new AttributeContextParameters
                                         {
-                                            var entAtt = attsPick[i] as CdmEntityAttributeDefinition;
-                                            addEntityReference(entAtt.Entity, this.InDocument.Namespace);
-                                        }
+                                            under = pickUnder,
+                                            type = pickEntType,
+                                            Name = pickEnt.FetchObjectDefinitionName(),
+                                            Regarding = pickEnt,
+                                            IncludeTraits = true
+                                        };
+                                        rasb.ResolvedAttributeSet.CreateAttributeContext(resOpt, acpEntAttEnt);
                                     }
                                 }
                             }
-                            else
-                            {
-                                addEntityReference(this.Entity, this.InDocument.Namespace);
-                            }
+                        }
 
-                            var constantEntity = this.Ctx.Corpus.MakeObject<CdmConstantEntityDefinition>(CdmObjectType.ConstantEntityDef);
-                            constantEntity.EntityShape = this.Ctx.Corpus.MakeRef<CdmEntityReference>(CdmObjectType.EntityRef, "entityGroupSet", true);
-                            constantEntity.ConstantValues = entReferences.Select((entRef, idx) => new List<string> { entRef, attReferences[idx] }).ToList();
-                            var traitParam = this.Ctx.Corpus.MakeRef<CdmEntityReference>(CdmObjectType.EntityRef, constantEntity, false);
-                            reqdTrait.ParameterValues.SetParameterValue(resOpt, "entityReferences", traitParam);
+                        // if we got here because of the max depth, need to impose the directives to make the trait work as expected
+                        if (resOpt.DepthInfo.MaxDepthExceeded)
+                        {
+                            Logger.Warning(this.Ctx, Tag, nameof(ConstructResolvedAttributes), this.AtCorpusPath, CdmLogCode.WarnMaxDepthExceeded, resOpt.DepthInfo.MaxDepth?.ToString(), this.Entity.FetchObjectDefinitionName());
+
+                            if (arc.ResOpt.Directives == null)
+                                arc.ResOpt.Directives = new AttributeResolutionDirectiveSet();
+                            arc.ResOpt.Directives.Add("referenceOnly");
                         }
                     }
-                }
-
-                // a 'structured' directive wants to keep all entity attributes together in a group
-                if (arc.ResOpt.Directives?.Has("structured") == true)
-                {
-                    // make one resolved attribute with a name from this entityAttribute that contains the set 
-                    // of atts we just put together. 
-                    ResolvedAttribute raSub = new ResolvedAttribute(arc.TraitsToApply.ResOpt, rasb.ResolvedAttributeSet, this.Name, underAtt);
-                    if (relInfo.IsArray)
+                    else
                     {
-                        // put a resolved trait on this att group, hope I never need to do this again and then need to make a function for this
-                        CdmTraitReference tr = this.Ctx.Corpus.MakeObject<CdmTraitReference>(CdmObjectType.TraitRef, "is.linkedEntity.array", true);
-                        var t = tr.FetchObjectDefinition<CdmTraitDefinition>(resOpt);
-                        ResolvedTrait rt = new ResolvedTrait(t, null, new List<dynamic>(), new List<bool>());
-                        raSub.ResolvedTraits = raSub.ResolvedTraits.Merge(rt, true);
+                        ResolveOptions resLink = resOpt.Copy();
+                        resLink.SymbolRefSet = resOpt.SymbolRefSet;
+                        rasb.MergeAttributes(this.Entity.FetchResolvedAttributes(resLink, acpEnt));
+
+                        // need to pass up maxDepthExceeded if it was hit
+                        if (resLink.DepthInfo.MaxDepthExceeded)
+                        {
+                            resOpt.DepthInfo = resLink.DepthInfo.Copy();
+                        }
                     }
-                    int depth = rasb.ResolvedAttributeSet.DepthTraveled;
-                    rasb = new ResolvedAttributeSetBuilder();
-                    rasb.ResolvedAttributeSet.AttributeContext = raSub.AttCtx; // this got set to null with the new builder
-                    rasb.OwnOne(raSub);
-                    rasb.ResolvedAttributeSet.DepthTraveled = depth;
+
+                    // from the traits of purpose and applied here, see if new attributes get generated
+                    rasb.ResolvedAttributeSet.AttributeContext = underAtt;
+                    rasb.ApplyTraits(arc);
+                    rasb.GenerateApplierAttributes(arc, true); // true = apply the prepared traits to new atts
+                                                               // this may have added symbols to the dependencies, so merge them
+                    resOpt.SymbolRefSet.Merge(arc.ResOpt.SymbolRefSet);
+
+                    // use the traits for linked entity identifiers to record the actual foreign key links
+                    if (rasb.ResolvedAttributeSet?.Set != null && relInfo.IsByRef)
+                    {
+                        foreach (var att in rasb.ResolvedAttributeSet.Set)
+                        {
+                            if (att.ResolvedTraits != null)
+                            {
+                                var reqdTrait = att.ResolvedTraits.Find(resOpt, "is.linkedEntity.identifier");
+                                if (reqdTrait == null)
+                                {
+                                    continue;
+                                }
+
+                                if (reqdTrait.ParameterValues == null || reqdTrait.ParameterValues.Length == 0)
+                                {
+                                    Logger.Warning(this.Ctx as ResolveContext, Tag, nameof(ConstructResolvedAttributes), this.AtCorpusPath, CdmLogCode.WarnLinkEntIdentArgsNotSupported, att.DisplayName, this.Entity.NamedReference);
+                                    continue;
+                                }
+
+                                var entReferences = new List<string>();
+                                var attReferences = new List<string>();
+                                Action<CdmEntityReference, string> addEntityReference = (CdmEntityReference entRef, string nameSpace) =>
+                                {
+                                    var entDef = entRef.FetchObjectDefinition<CdmEntityDefinition>(resOpt);
+                                    if (entDef != null)
+                                    {
+                                        var otherResTraits = entRef.FetchResolvedTraits(resOpt);
+                                        ResolvedTrait identifyingTrait;
+                                        if (otherResTraits != null && (identifyingTrait = otherResTraits.Find(resOpt, "is.identifiedBy")) != null)
+                                        {
+                                            var attRef = identifyingTrait.ParameterValues.FetchParameterValueByName("attribute").Value;
+                                            string attNamePath = ((CdmObjectReferenceBase)attRef).NamedReference;
+                                            string attName = attNamePath.Split('/').Last();
+                                            string absoluteEntPath = Ctx.Corpus.Storage.CreateAbsoluteCorpusPath(entDef.AtCorpusPath, entDef.InDocument);
+                                            entReferences.Add(absoluteEntPath);
+                                            attReferences.Add(attName);
+                                        }
+                                    }
+                                };
+                                if (relInfo.SelectsOne)
+                                {
+                                    var entPickFrom = this.Entity.FetchObjectDefinition<CdmEntityDefinition>(resOpt);
+                                    var attsPick = entPickFrom?.Attributes.Cast<CdmObject>().ToList();
+                                    if (entPickFrom != null && attsPick != null)
+                                    {
+                                        for (int i = 0; i < attsPick.Count; i++)
+                                        {
+                                            if (attsPick[i].ObjectType == CdmObjectType.EntityAttributeDef)
+                                            {
+                                                var entAtt = attsPick[i] as CdmEntityAttributeDefinition;
+                                                addEntityReference(entAtt.Entity, this.InDocument.Namespace);
+                                            }
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    addEntityReference(this.Entity, this.InDocument.Namespace);
+                                }
+
+                                var constantEntity = this.Ctx.Corpus.MakeObject<CdmConstantEntityDefinition>(CdmObjectType.ConstantEntityDef);
+                                constantEntity.EntityShape = this.Ctx.Corpus.MakeRef<CdmEntityReference>(CdmObjectType.EntityRef, "entityGroupSet", true);
+                                constantEntity.ConstantValues = entReferences.Select((entRef, idx) => new List<string> { entRef, attReferences[idx] }).ToList();
+                                var traitParam = this.Ctx.Corpus.MakeRef<CdmEntityReference>(CdmObjectType.EntityRef, constantEntity, false);
+                                reqdTrait.ParameterValues.SetParameterValue(resOpt, "entityReferences", traitParam);
+                            }
+                        }
+                    }
+
+                    // a 'structured' directive wants to keep all entity attributes together in a group
+                    if (arc.ResOpt.Directives?.Has("structured") == true)
+                    {
+                        // make one resolved attribute with a name from this entityAttribute that contains the set 
+                        // of atts we just put together. 
+                        ResolvedAttribute raSub = new ResolvedAttribute(arc.TraitsToApply.ResOpt, rasb.ResolvedAttributeSet, this.Name, underAtt);
+                        if (relInfo.IsArray)
+                        {
+                            // put a resolved trait on this att group, hope I never need to do this again and then need to make a function for this
+                            CdmTraitReference tr = this.Ctx.Corpus.MakeObject<CdmTraitReference>(CdmObjectType.TraitRef, "is.linkedEntity.array", true);
+                            var t = tr.FetchObjectDefinition<CdmTraitDefinition>(resOpt);
+                            ResolvedTrait rt = new ResolvedTrait(t, null, new List<dynamic>(), new List<bool>(), null, null);
+                            raSub.ResolvedTraits = raSub.ResolvedTraits.Merge(rt, true);
+                        }
+                        int depth = rasb.ResolvedAttributeSet.DepthTraveled;
+                        rasb = new ResolvedAttributeSetBuilder();
+                        rasb.ResolvedAttributeSet.AttributeContext = raSub.AttCtx; // this got set to null with the new builder
+                        rasb.OwnOne(raSub);
+                        rasb.ResolvedAttributeSet.DepthTraveled = depth;
+                    }
                 }
             }
 
             // how ever they got here, mark every attribute from this entity attribute as now being 'owned' by this entityAtt
             rasb.ResolvedAttributeSet.SetAttributeOwnership(this.Name);
             rasb.ResolvedAttributeSet.DepthTraveled += 1;
+
             return rasb;
         }
 
         // the only thing we need this code for is testing!!!
+        [Obsolete("For internal use only.")]
         public override ResolvedEntityReferenceSet FetchResolvedEntityReferences(ResolveOptions resOpt = null)
         {
             if (resOpt == null)
@@ -568,12 +491,12 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             }
 
             ResolvedTraitSet rtsThisAtt = this.FetchResolvedTraits(resOpt);
-            CdmAttributeResolutionGuidance resGuide = (CdmAttributeResolutionGuidance)this.ResolutionGuidance;
+            CdmAttributeResolutionGuidance resGuide = this.ResolutionGuidance;
 
             // this context object holds all of the info about what needs to happen to resolve these attributes
             AttributeResolutionContext arc = new AttributeResolutionContext(resOpt, resGuide, rtsThisAtt);
 
-            RelationshipInfo relInfo = this.GetRelationshipInfo(resOpt, arc);
+            RelationshipInfo relInfo = arc.GetRelationshipInfo();
             if (relInfo.IsByRef && !relInfo.IsArray)
             {
                 {
@@ -618,17 +541,17 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 
                     // either several or one entity
                     // for now, a sub for the 'select one' idea
-                    if ((this.Entity as CdmEntityReference).ExplicitReference != null)
+                    if (this.Entity.ExplicitReference != null)
                     {
-                        CdmEntityDefinition entPickFrom = (this.Entity as CdmEntityReference).FetchObjectDefinition<CdmEntityDefinition>(resOpt);
+                        CdmEntityDefinition entPickFrom = this.Entity.FetchObjectDefinition<CdmEntityDefinition>(resOpt);
                         CdmCollection<CdmAttributeItem> attsPick = entPickFrom.Attributes;
                         if (attsPick != null && attsPick != null)
                         {
                             for (int i = 0; i < attsPick.Count; i++)
                             {
-                                if (attsPick.AllItems[i].ObjectType == CdmObjectType.EntityAttributeDef)
+                                if (attsPick[i].ObjectType == CdmObjectType.EntityAttributeDef)
                                 {
-                                    CdmEntityReference er = (attsPick.AllItems[i] as CdmEntityAttributeDefinition).Entity;
+                                    CdmEntityReference er = (attsPick[i] as CdmEntityAttributeDefinition).Entity;
                                     rer.Referenced.Add(resolveSide(er));
                                 }
                             }
@@ -636,7 +559,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                     }
                     else
                     {
-                        rer.Referenced.Add(resolveSide(this.Entity as CdmEntityReference));
+                        rer.Referenced.Add(resolveSide(this.Entity));
                     }
 
                     rers.Set.Add(rer);

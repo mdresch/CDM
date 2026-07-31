@@ -7,12 +7,15 @@ import com.microsoft.commondatamodel.objectmodel.cdm.CdmCorpusContext;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmDataPartitionDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmEntityDeclarationDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmFolderDefinition;
+import com.microsoft.commondatamodel.objectmodel.cdm.CdmLocalEntityDeclarationDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmImport;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmManifestDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmTraitDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmTraitReference;
+import com.microsoft.commondatamodel.objectmodel.enums.CdmLogCode;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmObjectType;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmPropertyName;
+import com.microsoft.commondatamodel.objectmodel.persistence.PersistenceLayer;
 import com.microsoft.commondatamodel.objectmodel.persistence.modeljson.types.LocalEntity;
 import com.microsoft.commondatamodel.objectmodel.persistence.modeljson.types.Partition;
 import com.microsoft.commondatamodel.objectmodel.utilities.CopyOptions;
@@ -25,22 +28,20 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class LocalEntityDeclarationPersistence {
+  private static final String TAG = LocalEntityDeclarationPersistence.class.getSimpleName();
+
   public static CompletableFuture<CdmEntityDeclarationDefinition> fromData(
       final CdmCorpusContext ctx,
       final CdmFolderDefinition documentFolder,
       final LocalEntity obj,
       final List<CdmTraitDefinition> extensionTraitDefList,
       final CdmManifestDefinition manifest) {
-    final CdmEntityDeclarationDefinition localEntity = ctx.getCorpus()
+    final CdmLocalEntityDeclarationDefinition localEntity = ctx.getCorpus()
         .makeObject(CdmObjectType.LocalEntityDeclarationDef, obj.getName());
 
     final List<CdmTraitDefinition> localExtensionTraitDefList = new ArrayList<>();
     return DocumentPersistence.fromData(ctx, obj, extensionTraitDefList, localExtensionTraitDefList)
         .thenCompose(entityDoc -> {
-          if (entityDoc == null) {
-            Logger.error(LocalEntityDeclarationPersistence.class.getSimpleName(), ctx, "There was an error while trying to fetch the entity doc from local entity declaration persistence.");
-            return CompletableFuture.completedFuture(null);
-          }
 
           documentFolder.getDocuments().add(entityDoc);
 
@@ -50,7 +51,8 @@ public class LocalEntityDeclarationPersistence {
                   .getStorage()
                   .createRelativeCorpusPath(
                       entityDoc.getAtCorpusPath() + "/" + obj.getName(),
-                      manifest));
+                      documentFolder));
+          localEntity.setVirtualLocation(documentFolder.getFolderPath() + PersistenceLayer.modelJsonExtension);
           localEntity.setExplanation(obj.getDescription());
           localEntity.setLastChildFileModifiedTime(obj.getLastChildFileModifiedTime());
           localEntity.setLastFileModifiedTime(obj.getLastFileModifiedTime());
@@ -87,7 +89,7 @@ public class LocalEntityDeclarationPersistence {
               if (cdmPartition != null) {
                 localEntity.getDataPartitions().add(cdmPartition);
               } else {
-                Logger.error(LocalEntityDeclarationPersistence.class.getSimpleName(), ctx, "There was an error while trying to fetch the entity doc from local entity declaration persistence.");
+                Logger.error(ctx, TAG, "fromData", null, CdmLogCode.ErrPersistModelJsonDocConversionError);
                 return CompletableFuture.completedFuture(null);
               }
             }
@@ -110,7 +112,7 @@ public class LocalEntityDeclarationPersistence {
         .thenCompose(localEntity -> {
           if (localEntity != null) {
             final TraitToPropertyMap t2pm = new TraitToPropertyMap(instance);
-            final CdmTraitReference isHiddenTrait = t2pm.fetchTraitReferenceName("is.hidden");
+            final CdmTraitReference isHiddenTrait = t2pm.fetchTraitReference("is.hidden");
 
             if (localEntity.getDescription() == null) {
                 localEntity.setDescription(instance.getExplanation());
@@ -140,9 +142,6 @@ public class LocalEntityDeclarationPersistence {
 
                 if (partition != null) {
                   localEntity.getPartitions().add(partition);
-                } else {
-                  Logger.error(LocalEntityDeclarationPersistence.class.getSimpleName(), instance.getCtx(), "There was an error while trying to convert cdm data partition to model.json partition.");
-                  return CompletableFuture.completedFuture(null);
                 }
               }
             }

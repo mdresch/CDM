@@ -1,16 +1,19 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Cdm
 {
     using Microsoft.CommonDataModel.ObjectModel.Enums;
     using System.Collections.Generic;
+    using Microsoft.CommonDataModel.ObjectModel.Utilities.Logging;
 
     /// <summary>
     /// <see cref="CdmCollection"/> customized for <see cref="CdmDocumentDefinition"/>.
     /// </summary>
     public class CdmDocumentCollection : CdmCollection<CdmDocumentDefinition>
     {
+        private static readonly string Tag = nameof(CdmDocumentCollection);
+
         /// < inheritdoc/>
         protected new CdmFolderDefinition Owner
         {
@@ -26,29 +29,39 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <param name="ctx">The context.</param>
         /// <param name="owner">The folder that contains this collection.</param>
         public CdmDocumentCollection(CdmCorpusContext ctx, CdmFolderDefinition owner)
-            :base(ctx, owner, CdmObjectType.DocumentDef)
+            : base(ctx, owner, CdmObjectType.DocumentDef)
         {
         }
 
         /// <inheritdoc />
-        public new void Insert(int index, CdmDocumentDefinition document)
+        public new bool Insert(int index, CdmDocumentDefinition document)
         {
-            this.AddItemModifications(document);
+            if (!this.CheckAndAddItemModifications(document))
+                return false;
+
             // why is this collection unlike all other collections?
             // because documents are in folders. folders are not in documents.
             document.Owner = this.Owner;
-            this.AllItems.Insert(index, document);
+            lock (AllItems)
+            {
+                this.AllItems.Insert(index, document);
+            }
+            return true;
         }
 
         /// < inheritdoc/>
         public new CdmDocumentDefinition Add(CdmDocumentDefinition document)
         {
-            this.AddItemModifications(document);
+            if (!this.CheckAndAddItemModifications(document))
+                return null;
 
             // why is this collection unlike all other collections?
             // because documents are in folders. folders are not in documents.
             document.Owner = this.Owner;
-            AllItems.Add(document);
+            lock (AllItems)
+            {
+                AllItems.Add(document);
+            }
             return document;
         }
 
@@ -74,7 +87,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <inheritdoc />
         public new void AddRange(IEnumerable<CdmDocumentDefinition> documents)
         {
-            foreach(var document in documents)
+            foreach (var document in documents)
             {
                 this.Add(document);
             }
@@ -96,7 +109,11 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             if (this.Owner.DocumentLookup.ContainsKey(name))
             {
                 this.RemoveItemModifications(name);
-                var index = this.AllItems.FindIndex((d) => string.Equals(d.Name, name));
+                int index;
+                lock (AllItems)
+                {
+                    index = this.AllItems.FindIndex((d) => string.Equals(d.Name, name));
+                }
                 // setting this currentlyResolving flag will keep the base collection code from setting the inDocument to null
                 // this makes sense because a document is "in" itself. always.
                 bool bSave = this.Ctx.Corpus.isCurrentlyResolving;
@@ -111,26 +128,39 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <inheritdoc />
         public new void RemoveAt(int index)
         {
-            if (index >= 0 && index < this.AllItems.Count)
+            lock (AllItems)
             {
-                this.Remove(this.AllItems[index].Name);
+                if (index >= 0 && index < this.AllItems.Count)
+                {
+                    this.Remove(this.AllItems[index].Name);
+                }
             }
         }
 
         /// <inheritdoc />
         public new void Clear()
         {
-            this.AllItems.ForEach((doc) => this.RemoveItemModifications(doc.Name));
+            lock (AllItems)
+            {
+                this.AllItems.ForEach((doc) => this.RemoveItemModifications(doc.Name));
+            }
             base.Clear();
         }
 
         /// <summary>
-        /// Performs changes to an item that is added to the collection.
+        /// Check if document already added, if not then performs changes to an item that is added to the collection.
         /// Does not actually add the item to the collection.
         /// </summary>
         /// <param name="document">The item that needs to be changed.</param>
-        private void AddItemModifications(CdmDocumentDefinition document)
+        private bool CheckAndAddItemModifications(CdmDocumentDefinition document)
         {
+            if (this.Item(document.Name) != null)
+            {
+                Logger.Error(this.Ctx, Tag, nameof(CheckAndAddItemModifications), document.AtCorpusPath, CdmLogCode.ErrDocAlreadyExist, document.Name,
+                    this.Owner.AtCorpusPath != null ? this.Owner.AtCorpusPath : this.Owner.Name);
+                return false;
+            }
+
             if (document.Owner != null && document.Owner != this.Owner)
             {
                 // this is fun! the document is moving from one folder to another
@@ -142,11 +172,11 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             }
 
             document.FolderPath = this.Owner.FolderPath;
-            document.Folder = this.Owner;
+            document.Owner = this.Owner;
             document.Namespace = this.Owner.Namespace;
             MakeDocumentDirty(); // set the document to dirty so it will get saved in the new folder location if saved
             this.Owner.Corpus.AddDocumentObjects(this.Owner, document);
-            this.Owner.DocumentLookup.Add(document.Name, document);
+            return true;
         }
 
         /// <summary>

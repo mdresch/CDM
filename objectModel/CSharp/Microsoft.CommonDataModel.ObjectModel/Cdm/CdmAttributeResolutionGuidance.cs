@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Cdm
@@ -8,6 +8,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
     using System;
     using System.Collections.Generic;
 
+    [Obsolete("Resolution guidance is being deprecated in favor of Projections. https://docs.microsoft.com/en-us/common-data-model/sdk/convert-logical-entities-resolved-entities#projection-overview")]
     public class CdmAttributeResolutionGuidance : CdmObjectSimple
     {
         /// <summary>
@@ -43,6 +44,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <summary>
         /// Parameters that control array expansion if inline repeating of attributes is needed.
         /// </summary>
+        [Obsolete("Resolution guidance is being deprecated in favor of Projections. https://docs.microsoft.com/en-us/common-data-model/sdk/convert-logical-entities-resolved-entities#projection-overview")]
         public class Expansion
         {
             /// <summary>
@@ -69,6 +71,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <summary>
         /// Parameters that control the use of foreign keys to reference entity instances instead of embedding the entity in a nested way.
         /// </summary>
+        [Obsolete("Resolution guidance is being deprecated in favor of Projections. https://docs.microsoft.com/en-us/common-data-model/sdk/convert-logical-entities-resolved-entities#projection-overview")]
         public class CdmAttributeResolutionGuidance_EntityByReference
         {
             /// <summary>
@@ -100,6 +103,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
         /// <summary>
         /// Used to indicate that this attribute select either 'one' or 'all' of the sub-attributes from an entity. If the 'structured' directive is set, this trait causes resolved attributes to end up in groups rather than a flattend list.
         /// </summary>
+        [Obsolete("Resolution guidance is being deprecated in favor of Projections. https://docs.microsoft.com/en-us/common-data-model/sdk/convert-logical-entities-resolved-entities#projection-overview")]
         public class CdmAttributeResolutionGuidance_SelectsSubAttribute
         {
             /// <summary>
@@ -174,7 +178,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 copy.removedDirectives = new List<string>(this.removedDirectives);
             }
 
-            copy.addSupportingAttribute = this.addSupportingAttribute;
+            copy.addSupportingAttribute = this.addSupportingAttribute?.Copy(resOpt) as CdmTypeAttributeDefinition;
             copy.cardinality = this.cardinality;
             copy.renameFormat = this.renameFormat;
 
@@ -296,8 +300,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
                 {
                     if (this.entityByReference.alwaysIncludeForeignKey == null)
                         this.entityByReference.alwaysIncludeForeignKey = false;
-                    if (this.entityByReference.referenceOnlyAfterDepth == null)
-                        this.entityByReference.referenceOnlyAfterDepth = 2;
                     if (this.entityByReference.foreignKeyAttribute == null)
                     {
                         // make up a fk
@@ -379,7 +381,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             }
         }
 
-        internal CdmAttributeResolutionGuidance combineResolutionGuidance(CdmAttributeResolutionGuidance addIn)
+        internal CdmAttributeResolutionGuidance CombineResolutionGuidance(CdmAttributeResolutionGuidance addIn)
         {
             CdmAttributeResolutionGuidance startWith = this;
             if (addIn == null)
@@ -520,5 +522,10 @@ namespace Microsoft.CommonDataModel.ObjectModel.Cdm
             return result;
         }
 
+        /// <inheritdoc />
+        public override string FetchObjectDefinitionName()
+        {
+            return null;
+        }
     }
 }

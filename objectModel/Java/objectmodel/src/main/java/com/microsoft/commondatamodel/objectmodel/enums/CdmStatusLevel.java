@@ -7,8 +7,9 @@ package com.microsoft.commondatamodel.objectmodel.enums;
  * Definition of status report levels.
  */
 public enum CdmStatusLevel {
-  Info,
   Progress,
+  Info,
   Warning,
-  Error
+  Error,
+  None
 }

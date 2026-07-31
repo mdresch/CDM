@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm
@@ -7,6 +7,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm
     using Microsoft.CommonDataModel.ObjectModel.Enums;
     using Microsoft.CommonDataModel.ObjectModel.Utilities;
     using Microsoft.VisualStudio.TestTools.UnitTesting;
+    using System.Collections.Generic;
     using System.IO;
     using System.Threading.Tasks;
 
@@ -55,6 +56,26 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm
             }, CdmStatusLevel.Error);
 
             await corpus.ComputeLastModifiedTimeAsync("local:/default.manifest.cdm.json");
+        }
+
+        /// <summary>
+        /// Tests if the OM is able to load a data type with a cycle and log an error when that occurs.
+        /// </summary>
+        [TestMethod]
+        public async Task TestCycleInDataType()
+        {
+            var expectedLogCodes = new HashSet<CdmLogCode> { CdmLogCode.ErrCycleInObjectDefinition, CdmLogCode.ErrResolutionFailure };
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestCycleInDataType", expectedCodes: expectedLogCodes);
+
+            // Force the symbols to be resolved.
+            var resOpt = new ResolveOptions
+            {
+                ImportsLoadStrategy = ImportsLoadStrategy.Load
+            };
+
+            await corpus.FetchObjectAsync<CdmDocumentDefinition>("local:/doc.cdm.json", resOpt: resOpt);
+
+            TestHelper.AssertCdmLogCodeEquality(corpus, CdmLogCode.ErrCycleInObjectDefinition, true);
         }
 
         /// <summary>
@@ -178,6 +199,69 @@ namespace Microsoft.CommonDataModel.ObjectModel.Tests.Cdm
             };
             await corpus.FetchObjectAsync<CdmDocumentDefinition>("local:/doc.cdm.json", null, resOpt);
             Assert.AreEqual(1, errorCount);
+        }
+
+        /// <summary>
+        /// Tests if a symbol imported with a moniker can be found as the last resource.
+        /// When resolving entityReference from wrtConstEntity, constEntity should be found and resolved.
+        /// </summary>
+        [TestMethod]
+        public async Task TestResolveConstSymbolReference()
+        {
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestResolveConstSymbolReference");
+            corpus.SetEventCallback(new EventCallback
+            {
+                Invoke = (CdmStatusLevel statusLevel, string message) =>
+                {
+                    Assert.Fail(message);
+                }
+            }, CdmStatusLevel.Warning);
+
+            var wrtEntity = await corpus.FetchObjectAsync<CdmEntityDefinition>("local:/wrtConstEntity.cdm.json/wrtConstEntity");
+            var resOpt = new ResolveOptions(wrtEntity, new AttributeResolutionDirectiveSet());
+            await wrtEntity.CreateResolvedEntityAsync("NewEntity", resOpt);
+        }
+
+        /// <summary>
+        /// Tests that errors when trying to cast objects after fetching is handled correctly.
+        /// </summary>
+        [TestMethod]
+        public async Task TestIncorrectCastOnFetch()
+        {
+            var expectedLogCodes = new HashSet<CdmLogCode> { CdmLogCode.ErrInvalidCast };
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestIncorrectCastOnFetch", expectedCodes: expectedLogCodes);
+            var manifest = await corpus.FetchObjectAsync<CdmManifestDefinition>("local:/default.manifest.cdm.json");
+            // this function will fetch the entity inside it
+            await corpus.CalculateEntityGraphAsync(manifest);
+            TestHelper.AssertCdmLogCodeEquality(corpus, CdmLogCode.ErrInvalidCast, true);
+        }
+
+        /// <summary>
+        /// Test warning correctly logged when max depth is exceeded for Resolution Guidance
+        /// </summary>
+        [TestMethod]
+        public async Task TestMaxDepthExceededResolutionGuidance()
+        {
+            var expectedLogCodes = new HashSet<CdmLogCode> { CdmLogCode.WarnMaxDepthExceeded };
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestMaxDepthExceededResolutionGuidance", expectedCodes: expectedLogCodes);
+
+            var entity = await corpus.FetchObjectAsync<CdmEntityDefinition>("local:/firstEntity.cdm.json/firstEntity");
+            await entity.CreateResolvedEntityAsync("resFirstEntity");
+            TestHelper.AssertCdmLogCodeEquality(corpus, CdmLogCode.WarnMaxDepthExceeded, true);
+        }
+
+        /// <summary>
+        /// Test warning correctly logged when max depth is exceeded for Projections
+        /// </summary>
+        [TestMethod]
+        public async Task TestMaxDepthExceededProjections()
+        {
+            var expectedLogCodes = new HashSet<CdmLogCode> { CdmLogCode.WarnMaxDepthExceeded };
+            var corpus = TestHelper.GetLocalCorpus(testsSubpath, "TestMaxDepthExceededProjections", expectedCodes: expectedLogCodes);
+
+            var entity = await corpus.FetchObjectAsync<CdmEntityDefinition>("local:/A.cdm.json/A");
+            await entity.CreateResolvedEntityAsync("resA");
+            TestHelper.AssertCdmLogCodeEquality(corpus, CdmLogCode.WarnMaxDepthExceeded, true);
         }
     }
 }

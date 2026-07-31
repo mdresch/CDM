@@ -11,23 +11,27 @@ from .applier_state import ApplierState
 from .attribute_context_parameters import AttributeContextParameters
 from .attribute_resolution_applier import AttributeResolutionApplier
 from .attribute_resolution_directive_set import AttributeResolutionDirectiveSet
+from .exceptions.cdm_error import CdmError
+from .cdm_file_metadata import CdmFileMetadata
 from .copy_options import CopyOptions
+from .constants import Constants
 from .depth_info import DepthInfo
 from .docs_result import DocsResult
 from .event_callback import EventCallback
-from .exceptions import CdmError
+from .file_status_check_options import FileStatusCheckOptions
 from .friendly_format_node import FriendlyFormatNode
 from .identifier_ref import IdentifierRef
 from .import_info import ImportInfo
 from .jobject import JObject
 from .ref_counted import RefCounted
-from .resolve_context_scope import ResolveContextScope
 from .resolve_options import ResolveOptions
 from .symbol_set import SymbolSet
 from .trait_to_property_map import TraitToPropertyMap
 from .visit_callback import VisitCallback
 from .logging import logger
-from .errors import Errors
+from .logging.logger import _LoggerScope
+from .logging import event_list
+from .logging.telemetry_client import TelemetryClient
 from .storage_utils import StorageUtils
 
 
@@ -39,25 +43,27 @@ __all__ = [
     'AttributeResolutionDirectiveSet',
     'copy_data_utils',
     'CdmError',
+    'Constants',
     'CopyOptions',
     'DepthInfo',
     'DocsResult',
     'EventCallback',
-    'Errors',
     'FriendlyFormatNode',
     'IdentifierRef',
     'ImportInfo',
     'JObject',
     'lang_utils',
     'logger',
+    '_LoggerScope',
+    'event_list',
     'primitive_appliers',
     'RefCounted',
-    'ResolveContextScope',
     'ResolveOptions',
     'string_utils',
     'StorageUtils',
     'SymbolSet',
     'time_utils',
+    'TelemetryClient',
     'TraitToPropertyMap',
     'VisitCallback',
 ]

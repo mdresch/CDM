@@ -6,17 +6,20 @@ package com.microsoft.commondatamodel.objectmodel.cdm.cdmcollection;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmManifestDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmTraitDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmTraitReference;
+import com.microsoft.commondatamodel.objectmodel.utilities.Constants;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class CdmTraitCollectionTest {
   @Test
-  public void testCdmTraitCollectionAdd() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+   public void testCdmTraitCollectionAdd() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmTraitDefinition trait = new CdmTraitDefinition(
         manifest.getCtx(),
@@ -31,21 +34,26 @@ public class CdmTraitCollectionTest {
 
     final CdmTraitReference addedTrait = manifest.getExhibitsTraits().add(trait);
     final CdmTraitReference addedOtherTrait = manifest.getExhibitsTraits().add(otherTrait);
+    final List<Pair<String, Object>> listOfArgs = Arrays.asList(new ImmutablePair<>(Constants.IncrementalPatternParameterName, "test"), new ImmutablePair<>("fullDataPartitionPatternName", "name"));
+    final CdmTraitReference addedIncrementalTrait = (CdmTraitReference) manifest.getExhibitsTraits().add(Constants.IncrementalTraitName, listOfArgs);
 
     Assert.assertNull(manifest.getTraitCache());
-    Assert.assertEquals(2, manifest.getExhibitsTraits().size());
-    Assert.assertEquals(trait, manifest.getExhibitsTraits().get(0).getExplicitReference());
-    Assert.assertEquals(otherTrait, manifest.getExhibitsTraits().get(1).getExplicitReference());
-    Assert.assertEquals(addedTrait, manifest.getExhibitsTraits().get(0));
-    Assert.assertEquals(addedOtherTrait, manifest.getExhibitsTraits().get(1));
+    Assert.assertEquals(manifest.getExhibitsTraits().size(), 3);
+    Assert.assertEquals(manifest.getExhibitsTraits().get(0).getExplicitReference(), trait);
+    Assert.assertEquals(manifest.getExhibitsTraits().get(1).getExplicitReference(), otherTrait);
+    Assert.assertEquals(manifest.getExhibitsTraits().get(0), addedTrait);
+    Assert.assertEquals(manifest.getExhibitsTraits().get(1), addedOtherTrait);
+    Assert.assertEquals(manifest.getExhibitsTraits().get(2), addedIncrementalTrait);
+    Assert.assertEquals(((CdmTraitReference)manifest.getExhibitsTraits().get(2)).getArguments().size(), 2);
+    Assert.assertEquals(((CdmTraitReference)manifest.getExhibitsTraits().get(2)).getArguments().fetchValue(Constants.IncrementalPatternParameterName), "test");
+    Assert.assertEquals(((CdmTraitReference)manifest.getExhibitsTraits().get(2)).getArguments().fetchValue("fullDataPartitionPatternName"), "name");
 
     Assert.assertEquals(manifest, manifest.getExhibitsTraits().get(0).getOwner());
   }
 
   @Test
-  public void TestCdmTraitCollectionInsert() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void TestCdmTraitCollectionInsert() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmTraitReference trait =
         new CdmTraitReference(manifest.getCtx(), "TraitName", false, false);
@@ -66,9 +74,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void testCdmTraitCollectionAddAll() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void testCdmTraitCollectionAddAll() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
     final CdmTraitDefinition trait =
         new CdmTraitDefinition(manifest.getCtx(), "TraitName", null);
     final CdmTraitDefinition otherTrait =
@@ -86,9 +93,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void testCdmTraitCollectionRemove() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void testCdmTraitCollectionRemove() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmTraitDefinition trait =
         new CdmTraitDefinition(manifest.getCtx(), "TraitName", null);
@@ -124,8 +130,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void testCdmTraitCollectionRemoveAt() {
-    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest("C:\\Root\\Path");
+  public void testCdmTraitCollectionRemoveAt() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmTraitDefinition trait = new CdmTraitDefinition(manifest.getCtx(), "TraitName", null);
     final CdmTraitDefinition otherTrait = new CdmTraitDefinition(manifest.getCtx(), "Name of other Trait", null);
@@ -144,9 +150,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void testCdmTraitCollectionIndexOf() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void testCdmTraitCollectionIndexOf() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmTraitDefinition trait =
         new CdmTraitDefinition(manifest.getCtx(), "TraitName", null);
@@ -173,9 +178,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void CdmTraitCollectionRemoveOnlyFromProperty() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void CdmTraitCollectionRemoveOnlyFromProperty() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmTraitReference trait =
         new CdmTraitReference(manifest.getCtx(), "TraitName", false, false);
@@ -202,9 +206,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void CdmTraitCollectionRemovePrioritizeFromProperty() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void CdmTraitCollectionRemovePrioritizeFromProperty() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmTraitReference trait =
         new CdmTraitReference(manifest.getCtx(), "TraitName", false, false);
@@ -232,9 +235,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void testCdmTraitCollectionRemoveTraitDefinitionPrioritizeFromProperty() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void testCdmTraitCollectionRemoveTraitDefinitionPrioritizeFromProperty() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
     final CdmTraitDefinition trait =
         new CdmTraitDefinition(manifest.getCtx(), "TraitName", null);
     final CdmTraitDefinition otherTrait =
@@ -243,14 +245,14 @@ public class CdmTraitCollectionTest {
     manifest.getExhibitsTraits().add(trait);
     manifest.getExhibitsTraits().add(otherTrait);
     manifest.getExhibitsTraits().add(trait);
-    manifest.getExhibitsTraits().get(2).setFromProperty(true);
+    ((CdmTraitReference) manifest.getExhibitsTraits().get(2)).setFromProperty(true);
     manifest.getExhibitsTraits().add(otherTrait);
     manifest.getExhibitsTraits().add(trait);
-    manifest.getExhibitsTraits().get(4).setFromProperty(true);
+    ((CdmTraitReference) manifest.getExhibitsTraits().get(4)).setFromProperty(true);
     manifest.getExhibitsTraits().add(otherTrait);
     Assert.assertEquals(6, manifest.getExhibitsTraits().size());
 
-    Assert.assertTrue(manifest.getExhibitsTraits().get(2).isFromProperty());
+    Assert.assertTrue(((CdmTraitReference) manifest.getExhibitsTraits().get(2)).isFromProperty());
 
     final boolean removed = manifest.getExhibitsTraits().remove(trait);
     Assert.assertEquals(
@@ -268,9 +270,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void testCdmTraitCollectionIndexOfOnlyFromProperty() {
-    final CdmManifestDefinition manifest =
-        CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void testCdmTraitCollectionIndexOfOnlyFromProperty() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     final CdmTraitDefinition trait =
         new CdmTraitDefinition(manifest.getCtx(), "TraitName", null);
@@ -280,8 +281,8 @@ public class CdmTraitCollectionTest {
     manifest.getExhibitsTraits().add(trait);
     manifest.getExhibitsTraits().add(otherTrait);
 
-    Assert.assertFalse(manifest.getExhibitsTraits().get(0).isFromProperty());
-    Assert.assertFalse(manifest.getExhibitsTraits().get(1).isFromProperty());
+    Assert.assertFalse(((CdmTraitReference) manifest.getExhibitsTraits().get(0)).isFromProperty());
+    Assert.assertFalse(((CdmTraitReference) manifest.getExhibitsTraits().get(1)).isFromProperty());
 
     int index = manifest.getExhibitsTraits().indexOf(trait.getTraitName(), true);
     Assert.assertEquals(-1, index);
@@ -292,7 +293,7 @@ public class CdmTraitCollectionTest {
     manifest.getExhibitsTraits().add(otherTrait);
 
     Assert.assertEquals(6, manifest.getExhibitsTraits().size());
-    manifest.getExhibitsTraits().get(2).setFromProperty(true);
+    ((CdmTraitReference) manifest.getExhibitsTraits().get(2)).setFromProperty(true);
     index = manifest.getExhibitsTraits().indexOf(trait.getTraitName(), true);
     Assert.assertEquals(2, index);
     index = manifest.getExhibitsTraits().indexOf(trait.getTraitName());
@@ -300,8 +301,8 @@ public class CdmTraitCollectionTest {
   }
 
   @Test
-  public void cdmTraitCollectionClear() {
-    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest("C:/Root/Path");
+  public void cdmTraitCollectionClear() throws InterruptedException {
+    final CdmManifestDefinition manifest = CdmCollectionHelperFunctions.generateManifest();
 
     new CdmTraitReference(manifest.getCtx(), "TraitName", false, false);
     new CdmTraitReference(manifest.getCtx(), "Name of other Trait", false, false);

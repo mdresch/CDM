@@ -4,11 +4,13 @@
 import {
     CdmCorpusContext,
     CdmCorpusDefinition,
+    cdmLogCode,
     CdmObjectBase,
     CdmObjectDefinition,
     CdmObjectReference,
     CdmObjectReferenceBase,
     CdmTraitCollection,
+    Logger,
     ResolvedTraitSetBuilder,
     resolveOptions,
     VisitCallback
@@ -32,14 +34,30 @@ export abstract class CdmObjectDefinitionBase extends CdmObjectBase implements C
     public copyDef(resOpt: resolveOptions, copy: CdmObjectDefinitionBase): void {
         // let bodyCode = () =>
         {
+            copy.ctx = this.ctx;
             copy.declaredPath = this.declaredPath;
             copy.explanation = this.explanation;
             copy.exhibitsTraits.clear();
             for (const trait of this.exhibitsTraits) {
                 copy.exhibitsTraits.push(trait);
             }
+            copy.inDocument = this.inDocument; // if gets put into a new document, this will change. until, use the source
         }
         // return p.measure(bodyCode);
+    }
+
+    /**
+     * @internal
+     * Creates a 'portable' reference object to this object. portable means there is no symbolic name set until this reference is placed 
+     * into some final document. 
+     */
+    public createPortableReference(resOpt: resolveOptions): CdmObjectReference {
+        const cdmObjectRef: CdmObjectReferenceBase = this.ctx.corpus.MakeObject<CdmObjectReferenceBase>(CdmCorpusDefinition.mapReferenceType(this.objectType), 'portable', true) as CdmObjectReferenceBase;
+        cdmObjectRef.portableReference = this;
+        cdmObjectRef.inDocument = this.inDocument; // where it started life
+        cdmObjectRef.owner = this.owner;
+
+        return cdmObjectRef;
     }
 
     public fetchObjectDefinitionName(): string {
@@ -81,6 +99,14 @@ export abstract class CdmObjectDefinitionBase extends CdmObjectBase implements C
     }
 
     /**
+     * Given an initial path, returns this object's declared path
+     * @internal
+     */
+    public fetchDeclaredPath(pathFrom: string): string {
+        return pathFrom + this.getName() ?? '';
+    }
+
+    /**
      * @internal
      */
     public isDerivedFromDef(resOpt: resolveOptions, baseCdmObjectRef: CdmObjectReference, name: string, seek: string): boolean {
@@ -91,6 +117,13 @@ export abstract class CdmObjectDefinitionBase extends CdmObjectBase implements C
             }
 
             const def: CdmObjectDefinition = baseCdmObjectRef ? baseCdmObjectRef.fetchObjectDefinition(resOpt) : undefined;
+            
+            // detects a direct definition cycle, doesn't work for cases like A->B->A.
+            if (def === this) {
+                Logger.error(this.ctx, CdmObjectDefinitionBase.name, this.isDerivedFromDef.name, this.atCorpusPath, cdmLogCode.ErrCycleInObjectDefinition);
+                return true;
+            }
+
             if (def) {
                 return def.isDerivedFrom(seek, resOpt);
             }

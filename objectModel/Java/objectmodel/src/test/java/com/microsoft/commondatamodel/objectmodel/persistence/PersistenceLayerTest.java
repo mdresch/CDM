@@ -4,23 +4,18 @@
 package com.microsoft.commondatamodel.objectmodel.persistence;
 
 import com.microsoft.commondatamodel.objectmodel.TestHelper;
-import com.microsoft.commondatamodel.objectmodel.cdm.CdmCorpusDefinition;
-import com.microsoft.commondatamodel.objectmodel.cdm.CdmDocumentDefinition;
-import com.microsoft.commondatamodel.objectmodel.cdm.CdmEntityDefinition;
-import com.microsoft.commondatamodel.objectmodel.cdm.CdmFolderDefinition;
-import com.microsoft.commondatamodel.objectmodel.cdm.CdmLocalEntityDeclarationDefinition;
-import com.microsoft.commondatamodel.objectmodel.cdm.CdmManifestDefinition;
-import com.microsoft.commondatamodel.objectmodel.cdm.CdmTypeAttributeDefinition;
+import com.microsoft.commondatamodel.objectmodel.cdm.*;
+import com.microsoft.commondatamodel.objectmodel.enums.CdmLogCode;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmObjectType;
 import com.microsoft.commondatamodel.objectmodel.TestStorageAdapter;
 import com.microsoft.commondatamodel.objectmodel.storage.LocalAdapter;
 import com.microsoft.commondatamodel.objectmodel.storage.RemoteAdapter;
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
+
+import com.microsoft.commondatamodel.objectmodel.utilities.CopyOptions;
 import org.testng.AssertJUnit;
 import org.testng.annotations.Test;
 import org.testng.Assert;
@@ -88,8 +83,43 @@ public class PersistenceLayerTest {
     manifestFromModelJson.saveAsAsync(newManifestFromModelJsonName, true).get();
     // Verify that model.json persistence was called by comparing the saved document to the original model.json.
     serializedManifest = allDocs.get("/" + newManifestFromModelJsonName);
-    expectedOutputManifest = TestHelper.getExpectedOutputFileContent(testsSubpath, testName, manifestFromModelJson.getName());
+    expectedOutputManifest = TestHelper.getExpectedOutputFileContent(testsSubpath, testName, manifestFromModelJson.getManifestName() + PersistenceLayer.manifestExtension);
     TestHelper.assertSameObjectWasSerialized(expectedOutputManifest, serializedManifest);
+  }
+
+  /**
+   * Test setting SaveConfigFile to false and checking if the file is not saved.=
+   */
+  @Test
+  public void testNotSavingConfigFile() throws InterruptedException, IOException {
+    String testName = "testNotSavingConfigFile";
+    CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(this.testsSubpath, testName);
+
+    // Load manifest from input folder.
+    CdmManifestDefinition manifest = corpus.<CdmManifestDefinition>fetchObjectAsync("default.manifest.cdm.json").join();
+
+    // Move manifest to output folder.
+    CdmFolderDefinition outputFolder = corpus.getStorage().fetchRootFolder("output");
+    for (CdmEntityDeclarationDefinition entityDec : manifest.getEntities()) {
+      CdmEntityDefinition entity = corpus.<CdmEntityDefinition>fetchObjectAsync(entityDec.getEntityPath(), manifest).join();
+      outputFolder.getDocuments().add(entity.getInDocument());
+    }
+
+    outputFolder.getDocuments().add(manifest);
+
+    // Make sure the output folder is empty.
+    TestHelper.deleteFilesFromActualOutput(TestHelper.getActualOutputFolderPath(testsSubpath, testName));
+
+    // Save manifest to output folder.
+    CopyOptions copyOptions = new CopyOptions();
+    copyOptions.setSaveConfigFile(false);
+
+    manifest.saveAsAsync("default.manifest.cdm.json", false, copyOptions).join();
+
+    // Compare the result.
+    TestHelper.assertFolderFilesEquality(
+            TestHelper.getExpectedOutputFolderPath(testsSubpath, testName),
+            TestHelper.getActualOutputFolderPath(testsSubpath, testName));
   }
 
   /**
@@ -137,7 +167,7 @@ public class PersistenceLayerTest {
    */
   @Test
   public void testModelJsonTypeAttributePersistence() throws InterruptedException, ExecutionException {
-    CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(testsSubpath, "TestModelJsonTypeAttributePersistence", null);
+    CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(testsSubpath, "TestModelJsonTypeAttributePersistence");
 
     // we need to create a second adapter to the output folder to fool the OM into thinking it's different
     // this is because there is a bug currently that prevents us from saving and then loading a model.json
@@ -179,8 +209,10 @@ public class PersistenceLayerTest {
    * Test that the persistence layer handles the case when the persistence format cannot be found.
    */
   @Test
-  public void testMissingPersistenceFormat() throws InterruptedException{
-    CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(testsSubpath, "TestMissingPersistenceFormat", null);
+  public void testMissingPersistenceFormat() throws InterruptedException {
+    final HashSet<CdmLogCode> expectedLogCodes = new HashSet<> (Collections.singletonList(CdmLogCode.ErrPersistClassMissing));
+    CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(testsSubpath, "TestMissingPersistenceFormat", null, false, expectedLogCodes);
+
     CdmFolderDefinition folder = corpus.getStorage().fetchRootFolder(corpus.getStorage().getDefaultNamespace());
 
     CdmManifestDefinition manifest = corpus.<CdmManifestDefinition>makeObject(CdmObjectType.ManifestDef, "someManifest");
@@ -189,4 +221,23 @@ public class PersistenceLayerTest {
     boolean succeded = manifest.saveAsAsync("manifest.unSupportedExtension").join();
     Assert.assertFalse(succeded);
   }
+
+  /**
+   * Test that the persistence layer handles the case when the document is empty.
+   * @throws InterruptedException
+   * @throws ExecutionException
+   * @throws IOException
+   */
+  @Test
+  public void testLoadingEmptyJsonData() throws InterruptedException, ExecutionException, IOException {
+    String testName = "testLoadingEmptyJsonData";
+    HashSet<CdmLogCode> expectedCodes = new HashSet<>();
+    expectedCodes.add(CdmLogCode.ErrPersistFileReadFailure);
+    final CdmCorpusDefinition corpus = TestHelper.getLocalCorpus(testsSubpath, testName, null, false, expectedCodes, false);
+    CdmManifestDefinition manifest = corpus.<CdmManifestDefinition>fetchObjectAsync("empty.manifest.cdm.json").get();
+
+    Assert.assertNull(manifest);
+    TestHelper.assertCdmLogCodeEquality(corpus, CdmLogCode.ErrPersistFileReadFailure, true);
+  }
+
 }

@@ -6,27 +6,31 @@ package com.microsoft.commondatamodel.objectmodel.resolvedmodel;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmCorpusContext;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmCorpusDefinition;
 import com.microsoft.commondatamodel.objectmodel.cdm.CdmObjectBase;
-import com.microsoft.commondatamodel.objectmodel.cdm.CdmTraitDefinition;
+import com.microsoft.commondatamodel.objectmodel.enums.CdmLogCode;
 import com.microsoft.commondatamodel.objectmodel.enums.CdmStatusLevel;
 import com.microsoft.commondatamodel.objectmodel.utilities.EventCallback;
-import com.microsoft.commondatamodel.objectmodel.utilities.ResolveContextScope;
 import com.microsoft.commondatamodel.objectmodel.utilities.ResolveOptions;
+import com.microsoft.commondatamodel.objectmodel.utilities.logger.EventList;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Stack;
 
 public class ResolveContext implements CdmCorpusContext {
 
-  final protected Map<String, Object> cache;
+  final protected Map<String, ResolvedAttributeSetBuilder> attributeCache;
+  final protected Map<String, ResolvedTraitSet> traitCache;
+
   String corpusPathRoot;
-  int errors;
-  private Stack<ResolveContextScope> scopeStack;
-  private ResolveContextScope currentScope;
   private CdmCorpusDefinition corpus;
   private String relativePath;
   private CdmStatusLevel reportAtLevel;
   private EventCallback statusEvent;
+  private EventList events;
+  private HashSet<CdmLogCode> suppressedLogCodes;
+  private String correlationId;
+  private Map<String, Object> featureFlags;
 
   public ResolveContext(final CdmCorpusDefinition corpus) {
     this(corpus, null);
@@ -37,10 +41,14 @@ public class ResolveContext implements CdmCorpusContext {
   }
 
   public ResolveContext(final CdmCorpusDefinition corpus, final EventCallback statusEvent, CdmStatusLevel reportAtLevel) {
-    this.reportAtLevel = reportAtLevel != null ? reportAtLevel : CdmStatusLevel.Info;
+    this.reportAtLevel = reportAtLevel != null ? reportAtLevel : CdmStatusLevel.Warning;
     this.statusEvent = statusEvent;
-    this.cache = new LinkedHashMap<>();
+    this.attributeCache = new LinkedHashMap<>();
+    this.traitCache = new LinkedHashMap<>();
     this.corpus = corpus;
+    this.events = new EventList();
+    this.suppressedLogCodes = new HashSet<CdmLogCode>();
+    this.featureFlags = new HashMap<>();
   }
 
   @Override
@@ -71,53 +79,34 @@ public class ResolveContext implements CdmCorpusContext {
   @Override
   public void setStatusEvent(final EventCallback value) { this.statusEvent = value; }
 
-  public void pushScope(CdmTraitDefinition currentTrait) {
-    if (this.scopeStack == null) {
-      this.scopeStack = new Stack<>();
-    }
-
-    final ResolveContextScope ctxNew = new ResolveContextScope();
-    if (currentTrait == null && this.currentScope != null) {
-      currentTrait = this.currentScope.getCurrentTrait();
-    }
-    ctxNew.setCurrentTrait(currentTrait);
-    ctxNew.setCurrentParameter(0);
-
-    this.currentScope = ctxNew;
-    this.scopeStack.push(ctxNew);
+  @Override
+  public EventList getEvents() {
+    return events;
   }
 
-  public void popScope() {
-    this.scopeStack.pop();
-    this.currentScope = this.scopeStack.size() > 0 ? this.scopeStack.peek() : null;
+  @Override
+  public HashSet<CdmLogCode> getSuppressedLogCodes() {
+    return suppressedLogCodes;
   }
 
-  public Object fetchCache(final CdmObjectBase forObj, final String kind, final ResolveOptions resOpt) {
-    final String key =
-        forObj.getId()
-            + "_"
-            + (resOpt.getWrtDoc() != null ? resOpt.getWrtDoc().getId() : "NULL")
-            + "_"
-            + kind;
-    return this.cache.get(key);
+  @Override
+  public String getCorrelationId() {
+    return correlationId;
   }
 
-  public Map<String, Object> fetchCache() {
-    return this.cache;
+  @Override
+  public void setCorrelationId(String correlationId) {
+    this.correlationId = correlationId;
   }
 
-  public void updateCache(final CdmObjectBase forObj, final String kind, final Object value, final ResolveOptions resOpt) {
-    final String key =
-        forObj.getId()
-            + "_"
-            + (resOpt.getWrtDoc() != null ? resOpt.getWrtDoc().getId() : "NULL")
-            + "_"
-            + kind;
-    if (!this.cache.containsKey(key)) {
-      this.cache.put(key, value);
-    } else {
-      this.cache.replace(key, value);
-    }
+  @Override
+  public Map<String, Object> getFeatureFlags() {
+    return featureFlags;
+  }
+
+  @Override
+  public void setFeatureFlags(Map<String, Object> featureFlags) {
+    this.featureFlags = featureFlags;
   }
 
   /**
@@ -144,28 +133,6 @@ public class ResolveContext implements CdmCorpusContext {
 
   /**
    *
-   * @return Stack of ResolveContextScope
-   * @deprecated This function is extremely likely to be removed in the public interface, and not
-   * meant to be called externally at all. Please refrain from using it.
-   */
-  @Deprecated
-  public Stack<ResolveContextScope> getScopeStack() {
-    return scopeStack;
-  }
-
-  /**
-   *
-   * @return ResolveContextScope
-   * @deprecated This function is extremely likely to be removed in the public interface, and not
-   * meant to be called externally at all. Please refrain from using it.
-   */
-  @Deprecated
-  public ResolveContextScope getCurrentScope() {
-    return currentScope;
-  }
-
-  /**
-   *
    * @return String
    * @deprecated This function is extremely likely to be removed in the public interface, and not
    * meant to be called externally at all. Please refrain from using it.
@@ -188,12 +155,23 @@ public class ResolveContext implements CdmCorpusContext {
 
   /**
    *
-   * @return Map of String to Object
+   * @return Map of String to ResolvedAttributeSetBuilder
    * @deprecated This function is extremely likely to be removed in the public interface, and not
    * meant to be called externally at all. Please refrain from using it.
    */
   @Deprecated
-  public Map<String, Object> getCache() {
-    return cache;
+  public Map<String, ResolvedAttributeSetBuilder> getAttributeCache() {
+    return attributeCache;
+  }
+
+  /**
+   *
+   * @return Map of String to ResolvedTraitSet
+   * @deprecated This function is extremely likely to be removed in the public interface, and not
+   * meant to be called externally at all. Please refrain from using it.
+   */
+  @Deprecated
+  public Map<String, ResolvedTraitSet> getTraitCache() {
+    return traitCache;
   }
 }

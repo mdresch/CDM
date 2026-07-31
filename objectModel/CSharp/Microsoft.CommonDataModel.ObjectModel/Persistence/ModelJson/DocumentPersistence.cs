@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
@@ -17,19 +17,21 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
     /// </summary>
     public class DocumentPersistence
     {
+        private static readonly string Tag = nameof(DocumentPersistence);
+
         public static async Task<CdmDocumentDefinition> FromData(CdmCorpusContext ctx, LocalEntity obj, List<CdmTraitDefinition> extensionTraitDefList, List<CdmTraitDefinition> localExtensionTraitDefList)
         {
             var docName = $"{obj.Name}.cdm.json";
             var document = ctx.Corpus.MakeObject<CdmDocumentDefinition>(CdmObjectType.DocumentDef, docName);
 
             // import at least foundations
-            document.Imports.Add("cdm:/foundations.cdm.json");
+            document.Imports.Add(Constants.FoundationsCorpusPath);
 
             var entity = await EntityPersistence.FromData(ctx, obj, extensionTraitDefList, localExtensionTraitDefList);
 
             if (entity == null)
             {
-                Logger.Error(nameof(DocumentPersistence), ctx, "There was an error while trying to convert a model.json entity to the CDM entity.");
+                Logger.Error(ctx, Tag, nameof(FromData), null, CdmLogCode.ErrPersistModelJsonEntityConversionError, obj.Name);
                 return null;
             }
 
@@ -37,7 +39,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
             {
                 foreach (var import in obj.Imports)
                 {
-                    if (import.CorpusPath?.Equals("cdm:/foundations.cdm.json") == true)
+                    if (import.CorpusPath?.Equals(Constants.FoundationsCorpusPath) == true)
                     {
                         // don't add foundations twice
                         continue;
@@ -71,7 +73,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
                                 // so it is necessary to recalculate the path to be relative to the manifest.
                                 var absolutePath = ctx.Corpus.Storage.CreateAbsoluteCorpusPath(import.CorpusPath, document);
 
-                                if (!string.IsNullOrEmpty(document.Namespace) && absolutePath.StartsWith(document.Namespace + ":"))
+                                if (!StringUtils.IsBlankByCdmStandard(document.Namespace) && absolutePath.StartsWith(document.Namespace + ":"))
                                 {
                                     absolutePath = absolutePath.Substring(document.Namespace.Length + 1);
                                 }
@@ -82,13 +84,13 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
                     }
                     else
                     {
-                        Logger.Warning(nameof(DocumentPersistence), ctx, $"Entity {cdmEntity.GetName()} is not inside a document or its owner is not a document.");
+                        Logger.Warning(ctx, Tag, nameof(ToData), manifest.AtCorpusPath, CdmLogCode.WarnPersistEntityMissing, cdmEntity.GetName());
                     }
                     return entity;
                 }
                 else
                 {
-                    Logger.Error(nameof(DocumentPersistence), ctx, "There was an error while trying to fetch cdm entity doc.");
+                    Logger.Error(ctx, Tag, nameof(ToData), manifest.AtCorpusPath, CdmLogCode.ErrPersistCdmEntityFetchError);
                     return null;
                 }
             }

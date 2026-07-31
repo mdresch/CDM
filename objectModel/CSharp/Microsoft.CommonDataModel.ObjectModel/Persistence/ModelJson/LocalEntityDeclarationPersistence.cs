@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+// Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
@@ -16,25 +16,21 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
     /// </summary>
     class LocalEntityDeclarationPersistence
     {
+        private static readonly string Tag = nameof(LocalEntityDeclarationPersistence);
 
         public static async Task<CdmLocalEntityDeclarationDefinition> FromData(CdmCorpusContext ctx, CdmFolderDefinition documentFolder, LocalEntity obj, List<CdmTraitDefinition> extensionTraitDefList, CdmManifestDefinition manifest)
         {
             var localEntity = ctx.Corpus.MakeObject<CdmLocalEntityDeclarationDefinition>(CdmObjectType.LocalEntityDeclarationDef, obj.Name);
+            localEntity.VirtualLocation = documentFolder.FolderPath + PersistenceLayer.ModelJsonExtension;
 
             var localExtensionTraitDefList = new List<CdmTraitDefinition>();
 
             var entityDoc = await DocumentPersistence.FromData(ctx, obj, extensionTraitDefList, localExtensionTraitDefList);
 
-            if (entityDoc == null)
-            {
-                Logger.Error(nameof(LocalEntityDeclarationPersistence), ctx, "There was an error while trying to fetch the entity doc from local entity declaration persistence.");
-                return null;
-            }
-
             documentFolder.Documents.Add(entityDoc);
 
             // Entity schema path is the path to the doc containing the entity definition.
-            localEntity.EntityPath = ctx.Corpus.Storage.CreateRelativeCorpusPath($"{entityDoc.AtCorpusPath}/{obj.Name}", manifest);
+            localEntity.EntityPath = ctx.Corpus.Storage.CreateRelativeCorpusPath($"{entityDoc.AtCorpusPath}/{obj.Name}", documentFolder);
             localEntity.Explanation = obj.Description;
             localEntity.LastChildFileModifiedTime = obj.LastChildFileModifiedTime;
             localEntity.LastFileModifiedTime = obj.LastFileModifiedTime;
@@ -67,7 +63,7 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
                     }
                     else
                     {
-                        Logger.Error(nameof(LocalEntityDeclarationPersistence), ctx, "There was an error while trying to fetch the entity doc from local entity declaration persistence.");
+                        Logger.Error((ResolveContext)ctx, Tag, nameof(FromData), null, CdmLogCode.ErrPersistModelJsonDocConversionError);
                         return null;
                     }
                 }
@@ -117,11 +113,6 @@ namespace Microsoft.CommonDataModel.ObjectModel.Persistence.ModelJson
                         if (partition != null)
                         {
                             localEntity.Partitions.Add(partition);
-                        }
-                        else
-                        {
-                            Logger.Error(nameof(LocalEntityDeclarationPersistence), instance.Ctx, "There was an error while trying to convert cdm data partition to model.json partition.");
-                            return null;
                         }
                     }
                 }

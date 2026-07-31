@@ -12,11 +12,12 @@ import {
     CdmObject,
     CdmObjectDefinitionBase,
     cdmObjectType,
-    Errors,
+    cdmLogCode,
     Logger,
     ResolvedAttributeSetBuilder,
     ResolvedTraitSetBuilder,
     resolveOptions,
+    StringUtils,
     VisitCallback
 } from '../internal';
 import * as timeUtils from '../Utilities/timeUtils';
@@ -25,6 +26,8 @@ import * as timeUtils from '../Utilities/timeUtils';
  * The object model implementation for referenced entity declaration.
  */
 export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitionBase implements CdmEntityDeclarationDefinition {
+    private TAG: string = CdmReferencedEntityDeclarationDefinition.name;
+
     /**
      * @inheritdoc
      */
@@ -36,6 +39,10 @@ export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
 
     public dataPartitionPatterns: CdmCollection<CdmDataPartitionPatternDefinition>;
 
+    public incrementalPartitions: CdmCollection<CdmDataPartitionDefinition>;
+
+    public incrementalPartitionPatterns: CdmCollection<CdmDataPartitionPatternDefinition>;
+
     /**
      * @inheritdoc
      */
@@ -45,6 +52,12 @@ export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
      * @inheritdoc
      */
     public lastFileModifiedTime: Date;
+
+    /**
+     * @inheritdoc
+     * Gets and sets this entity's virtual location, it's model.json file's location if entity is from a model.json file
+     */
+    public virtualLocation: string;
 
     public static get objectType(): cdmObjectType {
         return cdmObjectType.referencedEntityDeclarationDef;
@@ -60,7 +73,6 @@ export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
 
         this.objectType = cdmObjectType.referencedEntityDeclarationDef;
         this.entityName = entityName;
-
     }
 
     /**
@@ -68,6 +80,13 @@ export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
      */
     public getObjectType(): cdmObjectType {
         return cdmObjectType.referencedEntityDeclarationDef;
+    }
+
+    /**
+     * @inheritdoc
+     */
+     public isVirtual(): boolean {
+        return !StringUtils.isNullOrWhiteSpace(this.virtualLocation);
     }
 
     /**
@@ -83,12 +102,12 @@ export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
             copy = new CdmReferencedEntityDeclarationDefinition(this.ctx, this.entityName);
         } else {
             copy = host as CdmReferencedEntityDeclarationDefinition;
-            copy.ctx = this.ctx;
             copy.entityName = this.entityName;
         }
         copy.entityPath = this.entityPath;
         copy.lastFileStatusCheckTime = this.lastFileStatusCheckTime;
         copy.lastFileModifiedTime = this.lastFileModifiedTime;
+        copy.virtualLocation = this.virtualLocation;
         this.copyDef(resOpt, copy);
 
         return copy;
@@ -107,13 +126,7 @@ export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
         }
 
         if (missingFields.length > 0) {
-            Logger.error(
-                CdmReferencedEntityDeclarationDefinition.name,
-                this.ctx,
-                Errors.validateErrorString(this.atCorpusPath, missingFields),
-                this.validate.name
-            );
-
+            Logger.error(this.ctx, this.TAG, this.validate.name, this.atCorpusPath, cdmLogCode.ErrValdnIntegrityCheckFailure, this.atCorpusPath, missingFields.map((s: string) => `'${s}'`).join(', '));
             return false;
         }
 
@@ -131,6 +144,15 @@ export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
      * @inheritdoc
      */
     public visit(pathFrom: string, preChildren: VisitCallback, postChildren: VisitCallback): boolean {
+        const path: string = '';
+
+        if (preChildren && preChildren(this, path)) {
+            return false;
+        }
+
+        if (postChildren && postChildren(this, path)) {
+            return true;
+        }
         return false;
     }
 
@@ -162,7 +184,8 @@ export class CdmReferencedEntityDeclarationDefinition extends CdmObjectDefinitio
      */
     public async fileStatusCheckAsync(): Promise<void> {
         const fullPath: string = this.ctx.corpus.storage.createAbsoluteCorpusPath(this.entityPath, this.inDocument);
-        const modifiedTime: Date = await this.ctx.corpus.computeLastModifiedTimeAsync(fullPath, this);
+        const modifiedTime: Date = this.isVirtual() ? await this.ctx.corpus.getLastModifiedTimeFromObjectAsync(this) 
+                                                    : await this.ctx.corpus.computeLastModifiedTimeAsync(fullPath, this);
 
         this.lastFileStatusCheckTime = new Date();
         this.lastFileModifiedTime = timeUtils.maxTime(modifiedTime, this.lastFileModifiedTime);
